@@ -1,0 +1,37 @@
+server:
+  http_addr: ":8080"
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8080"
+
+runtime:
+  workspace_root: "./data/workspaces"
+  log_root: "./data/logs"
+  checkpoint_root: "./data/checkpoints"
+
+scheduler:
+  tick_seconds: 3
+  max_concurrent_agents: 2
+  max_heavy_agents: 1
+  max_test_jobs: 1
+
+thresholds:
+  warn_memory_percent: 70
+  high_memory_percent: 80
+  critical_memory_percent: 88
+  disk_warn_percent: 80
+  disk_high_percent: 90
+  workspace_max_size_mb: 2048
+  log_retention_days: 7
+  max_total_log_size_mb: 1024
+  max_child_processes_per_agent: 10
+
+timeouts:
+  heartbeat_timeout_seconds: 30
+  stall_timeout_seconds: 900
+  checkpoint_interval_seconds: 30
+
+sqlite:
+  path: "./data/app.db"
+  wal_mode: true
+  busy_timeout_ms: 5000
