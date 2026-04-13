@@ -55,6 +55,46 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		return err
 	}
 
+	var edges []domain.WorkflowEdge
+	if template.EdgesJSON != "" {
+		if err := json.Unmarshal([]byte(template.EdgesJSON), &edges); err != nil {
+			slog.Warn("parse edges json", "error", err)
+		}
+	}
+
+	dependencyMap := make(map[string][]string)
+	for _, edge := range edges {
+		dependencyMap[edge.To] = append(dependencyMap[edge.To], edge.From)
+	}
+
+	visited := make(map[string]bool)
+	var dfs func(nodeID string) bool
+	dfs = func(nodeID string) bool {
+		if visited[nodeID] {
+			return false
+		}
+		visited[nodeID] = true
+		for _, dep := range dependencyMap[nodeID] {
+			if visited[dep] {
+				return true
+			}
+			if dfs(dep) {
+				return true
+			}
+		}
+		delete(visited, nodeID)
+		return false
+	}
+	for _, node := range nodes {
+		if dfs(node.ID) {
+			slog.Warn("cycle detected in workflow edges", "run_id", run.ID)
+			edges = nil
+			dependencyMap = make(map[string][]string)
+			break
+		}
+	}
+
+	nodeTaskMap := make(map[string]string)
 	for _, node := range nodes {
 		taskSpec, _ := o.repos.TaskSpecs.GetByID(node.TaskSpecID)
 
@@ -63,15 +103,21 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 			resourceClass = taskSpec.ResourceClass
 		}
 
+		hasDeps := len(dependencyMap[node.ID]) > 0
+		initialStatus := domain.TaskStatusQueued
+		if hasDeps {
+			initialStatus = domain.TaskStatusBlocked
+		}
+
 		task := &domain.Task{
 			ID:            uuid.New().String(),
 			RunID:         run.ID,
 			TaskSpecID:    node.TaskSpecID,
 			TaskType:      node.Label,
 			AttemptNo:     1,
-			Status:        domain.TaskStatusQueued,
+			Status:        initialStatus,
 			Priority:      domain.PriorityNormal,
-			QueueStatus:   "queued",
+			QueueStatus:   string(initialStatus),
 			ResourceClass: resourceClass,
 			Preemptible:   true,
 			RestartPolicy: "never",
@@ -82,7 +128,9 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		if err := o.repos.Tasks.Create(task); err != nil {
 			return err
 		}
-		slog.Info("task created from template", "run_id", run.ID, "task_id", task.ID, "label", node.Label)
+
+		nodeTaskMap[node.ID] = task.ID
+		slog.Info("task created from template", "run_id", run.ID, "task_id", task.ID, "label", node.Label, "status", initialStatus)
 	}
 
 	if err := o.repos.Runs.UpdateStatus(run.ID, domain.RunStatusRunning); err != nil {
@@ -90,6 +138,100 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 	}
 
 	return nil
+}
+
+func (o *Orchestrator) UnblockDependentTasks(ctx context.Context, completedTaskID string) error {
+	tasks, err := o.repos.Tasks.ListByStatus(domain.TaskStatusBlocked)
+	if err != nil {
+		return err
+	}
+
+	for _, task := range tasks {
+		if task.TaskSpecID == "" {
+			continue
+		}
+
+		deps := o.getTaskDependencies(task)
+		if len(deps) == 0 {
+			continue
+		}
+
+		allMet := true
+		for _, depTaskID := range deps {
+			depTask, err := o.repos.Tasks.GetByID(depTaskID)
+			if err != nil || depTask == nil {
+				allMet = false
+				break
+			}
+			if depTask.Status != domain.TaskStatusCompleted {
+				allMet = false
+				break
+			}
+		}
+
+		if allMet {
+			if err := o.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusQueued); err != nil {
+				slog.Error("unblock task", "task_id", task.ID, "error", err)
+				continue
+			}
+			o.emitEvent(ctx, task.RunID, &task.ID, nil, "task_unblocked", "task unblocked, all dependencies completed")
+			slog.Info("task unblocked", "task_id", task.ID, "run_id", task.RunID)
+		}
+	}
+
+	return nil
+}
+
+func (o *Orchestrator) getTaskDependencies(task *domain.Task) []string {
+	if task.RunID == "" {
+		return nil
+	}
+
+	run, err := o.repos.Runs.GetByID(task.RunID)
+	if err != nil || run == nil || run.WorkflowTemplateID == "" {
+		return nil
+	}
+
+	template, err := o.repos.WorkflowTemplates.GetByID(run.WorkflowTemplateID)
+	if err != nil || template == nil || template.EdgesJSON == "" {
+		return nil
+	}
+
+	var edges []domain.WorkflowEdge
+	if err := json.Unmarshal([]byte(template.EdgesJSON), &edges); err != nil {
+		return nil
+	}
+
+	var nodeID string
+	var nodes []domain.WorkflowNode
+	if err := json.Unmarshal([]byte(template.NodesJSON), &nodes); err != nil {
+		return nil
+	}
+
+	nodeTaskMap := make(map[string]string)
+	taskNodeMap := make(map[string]string)
+	for _, n := range nodes {
+		tasks, _ := o.repos.Tasks.ListByRun(run.ID)
+		for _, t := range tasks {
+			if t.TaskSpecID == n.TaskSpecID {
+				nodeTaskMap[n.ID] = t.ID
+				taskNodeMap[t.ID] = n.ID
+			}
+		}
+	}
+
+	nodeID = taskNodeMap[task.ID]
+
+	var depTaskIDs []string
+	for _, edge := range edges {
+		if edge.To == nodeID {
+			if taskID, ok := nodeTaskMap[edge.From]; ok {
+				depTaskIDs = append(depTaskIDs, taskID)
+			}
+		}
+	}
+
+	return depTaskIDs
 }
 
 func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
@@ -106,6 +248,10 @@ func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
 	}
 
 	o.emitEvent(ctx, task.RunID, &taskID, nil, domain.EventTypeTaskCompleted, "task completed")
+
+	if err := o.UnblockDependentTasks(ctx, taskID); err != nil {
+		slog.Error("unblock dependent tasks", "error", err)
+	}
 
 	tasks, err := o.repos.Tasks.ListByRun(task.RunID)
 	if err != nil {

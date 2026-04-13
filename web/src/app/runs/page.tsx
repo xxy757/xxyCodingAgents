@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 
 interface Run {
@@ -11,13 +12,27 @@ interface Run {
   created_at: string;
 }
 
+interface Project {
+  id: string;
+  name: string;
+}
+
+interface WorkflowTemplate {
+  id: string;
+  name: string;
+  description: string;
+}
+
 export default function RunsPage() {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [templateId, setTemplateId] = useState("");
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
@@ -29,6 +44,14 @@ export default function RunsPage() {
         setError(e.message);
       })
       .finally(() => setLoading(false));
+
+    apiFetch<Project[]>("/api/projects")
+      .then(setProjects)
+      .catch(() => {});
+
+    apiFetch<WorkflowTemplate[]>("/api/workflow-templates")
+      .then(setTemplates)
+      .catch(() => {});
   }, []);
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -36,19 +59,38 @@ export default function RunsPage() {
     try {
       setCreating(true);
       setError(null);
+      const body: Record<string, string> = { title };
+      if (projectId) body.project_id = projectId;
+      if (templateId) body.workflow_template_id = templateId;
       const run = await apiFetch<Run>("/api/runs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ project_id: projectId, title }),
+        body: JSON.stringify(body),
       });
       setRuns([run, ...runs]);
       setTitle("");
       setProjectId("");
+      setTemplateId("");
       setShowForm(false);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const statusColor = (status: string) => {
+    switch (status) {
+      case "running":
+        return "bg-green-100 text-green-700";
+      case "pending":
+        return "bg-yellow-100 text-yellow-700";
+      case "failed":
+        return "bg-red-100 text-red-700";
+      case "completed":
+        return "bg-blue-100 text-blue-700";
+      default:
+        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -71,15 +113,35 @@ export default function RunsPage() {
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">项目 ID</label>
-            <input
-              type="text"
+            <label className="block text-sm font-medium mb-1">项目</label>
+            <select
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
               className="w-full border rounded px-3 py-2 text-sm"
-              placeholder="输入项目 ID"
               required
-            />
+            >
+              <option value="">选择项目</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">工作流模板</label>
+            <select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="w-full border rounded px-3 py-2 text-sm"
+            >
+              <option value="">无模板（手动管理）</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} — {t.description}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">标题</label>
@@ -114,6 +176,7 @@ export default function RunsPage() {
               <th className="pb-2">标题</th>
               <th className="pb-2">状态</th>
               <th className="pb-2">创建时间</th>
+              <th className="pb-2">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -122,21 +185,16 @@ export default function RunsPage() {
                 <td className="py-2 text-sm font-mono">{run.id.slice(0, 8)}</td>
                 <td className="py-2 text-sm">{run.title}</td>
                 <td className="py-2 text-sm">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      run.status === "running"
-                        ? "bg-green-100 text-green-700"
-                        : run.status === "pending"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : run.status === "failed"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor(run.status)}`}>
                     {run.status}
                   </span>
                 </td>
                 <td className="py-2 text-sm">{new Date(run.created_at).toLocaleString()}</td>
+                <td className="py-2 text-sm">
+                  <Link href={`/runs/${run.id}`} className="text-blue-600 hover:underline">
+                    查看详情
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>

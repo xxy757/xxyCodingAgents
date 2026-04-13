@@ -36,29 +36,69 @@ func NewDB(dbPath string, walMode bool, busyTimeoutMs int) (*DB, error) {
 }
 
 func (db *DB) RunMigrations() error {
-	migrations := []string{
-		migrateProjects,
-		migrateRuns,
-		migrateTasks,
-		migrateAgentInstances,
-		migrateWorkspaces,
-		migrateTerminalSessions,
-		migrateCheckpoints,
-		migrateResourceSnapshots,
-		migrateEvents,
-		migrateCommandLogs,
-		migrateTaskSpecs,
-		migrateAgentSpecs,
-		migrateWorkflowTemplates,
-		migrateIndexes,
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version INTEGER PRIMARY KEY,
+			name TEXT NOT NULL,
+			applied_at DATETIME NOT NULL DEFAULT (datetime('now'))
+		)
+	`); err != nil {
+		return fmt.Errorf("create schema_migrations table: %w", err)
 	}
 
-	for _, m := range migrations {
-		if _, err := db.Exec(m); err != nil {
-			return fmt.Errorf("run migration: %w\nSQL: %s", err, m)
+	migrations := []struct {
+		Name string
+		SQL  string
+	}{
+		{"projects", migrateProjects},
+		{"runs", migrateRuns},
+		{"tasks", migrateTasks},
+		{"agent_instances", migrateAgentInstances},
+		{"workspaces", migrateWorkspaces},
+		{"terminal_sessions", migrateTerminalSessions},
+		{"checkpoints", migrateCheckpoints},
+		{"resource_snapshots", migrateResourceSnapshots},
+		{"events", migrateEvents},
+		{"command_logs", migrateCommandLogs},
+		{"task_specs", migrateTaskSpecs},
+		{"agent_specs", migrateAgentSpecs},
+		{"workflow_templates", migrateWorkflowTemplates},
+		{"indexes", migrateIndexes},
+	}
+
+	for i, m := range migrations {
+		var count int
+		db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", i+1).Scan(&count)
+		if count > 0 {
+			continue
+		}
+
+		tx, err := db.Begin()
+		if err != nil {
+			return fmt.Errorf("begin migration transaction for %s: %w", m.Name, err)
+		}
+
+		if _, err := tx.Exec(m.SQL); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("run migration %s: %w\nSQL: %s", m.Name, err, m.SQL)
+		}
+
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version, name) VALUES (?, ?)", i+1, m.Name); err != nil {
+			tx.Rollback()
+			return fmt.Errorf("record migration %s: %w", m.Name, err)
+		}
+
+		if err := tx.Commit(); err != nil {
+			return fmt.Errorf("commit migration %s: %w", m.Name, err)
 		}
 	}
 	return nil
+}
+
+func (db *DB) CurrentVersion() (int, error) {
+	var version int
+	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
+	return version, err
 }
 
 const migrateProjects = `

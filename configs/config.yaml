@@ -1,5 +1,6 @@
 server:
   http_addr: ":8080"
+  pprof_addr: "localhost:6060"
   allowed_origins:
     - "http://localhost:3000"
     - "http://localhost:8080"
@@ -28,6 +29,7 @@ thresholds:
 
 timeouts:
   heartbeat_timeout_seconds: 30
+  output_timeout_seconds: 900
   stall_timeout_seconds: 900
   checkpoint_interval_seconds: 30
 

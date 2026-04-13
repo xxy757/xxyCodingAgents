@@ -289,6 +289,13 @@ func (r *AgentInstanceRepo) UpdatePID(id string, pid int) error {
 	return err
 }
 
+func (r *AgentInstanceRepo) UpdateCheckpointID(id string, checkpointID string) error {
+	_, err := r.db.Exec(
+		"UPDATE agent_instances SET checkpoint_id = ?, updated_at = ? WHERE id = ?", checkpointID, time.Now(), id,
+	)
+	return err
+}
+
 func (r *AgentInstanceRepo) ListByRun(runID string) ([]*domain.AgentInstance, error) {
 	rows, err := r.db.Query(
 		`SELECT id, run_id, task_id, agent_spec_id, agent_kind, status, pid, tmux_session, workspace_path, last_heartbeat_at, last_output_at, checkpoint_id, metadata, created_at, updated_at
@@ -420,6 +427,26 @@ func (r *CheckpointRepo) LatestByTask(taskID string) (*domain.Checkpoint, error)
 	return c, err
 }
 
+func (r *CheckpointRepo) ListByTask(taskID string) ([]*domain.Checkpoint, error) {
+	rows, err := r.db.Query(
+		"SELECT id, agent_id, task_id, run_id, phase, state_data, reason, created_at FROM checkpoints WHERE task_id = ? ORDER BY created_at DESC", taskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var checkpoints []*domain.Checkpoint
+	for rows.Next() {
+		c := &domain.Checkpoint{}
+		if err := rows.Scan(&c.ID, &c.AgentID, &c.TaskID, &c.RunID, &c.Phase, &c.StateData, &c.Reason, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		checkpoints = append(checkpoints, c)
+	}
+	return checkpoints, nil
+}
+
 type ResourceSnapshotRepo struct {
 	db *DB
 }
@@ -477,6 +504,26 @@ func (r *WorkspaceRepo) GetByTaskID(taskID string) (*domain.Workspace, error) {
 		return nil, nil
 	}
 	return w, err
+}
+
+func (r *WorkspaceRepo) ListActive() ([]*domain.Workspace, error) {
+	rows, err := r.db.Query(
+		"SELECT id, task_id, project_id, path, branch, commit_sha, size_bytes, created_at, updated_at FROM workspaces",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var workspaces []*domain.Workspace
+	for rows.Next() {
+		w := &domain.Workspace{}
+		if err := rows.Scan(&w.ID, &w.TaskID, &w.ProjectID, &w.Path, &w.Branch, &w.CommitSHA, &w.SizeBytes, &w.CreatedAt, &w.UpdatedAt); err != nil {
+			return nil, err
+		}
+		workspaces = append(workspaces, w)
+	}
+	return workspaces, nil
 }
 
 type TerminalSessionRepo struct {

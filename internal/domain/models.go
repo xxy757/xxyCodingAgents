@@ -43,6 +43,7 @@ const (
 	TaskStatusFailed     TaskStatus = "failed"
 	TaskStatusCancelled  TaskStatus = "cancelled"
 	TaskStatusEvicted    TaskStatus = "evicted"
+	TaskStatusBlocked    TaskStatus = "blocked"
 )
 
 type TaskPriority string

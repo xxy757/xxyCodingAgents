@@ -59,10 +59,23 @@ func (a *ClaudeCodeAdapter) Stop(ctx context.Context, tmuxSession string) error 
 	return exec.CommandContext(ctx, "tmux", "kill-session", "-t", tmuxSession).Run()
 }
 
-func (a *ClaudeCodeAdapter) Checkpoint(ctx context.Context, agentID string) (*CheckpointData, error) {
+func (a *ClaudeCodeAdapter) Checkpoint(ctx context.Context, tmuxSession string) (*CheckpointData, error) {
+	output := ""
+	if tmuxSession != "" {
+		out, err := exec.CommandContext(ctx, "tmux", "capture-pane", "-t", tmuxSession, "-p", "-S", "-100").Output()
+		if err == nil {
+			output = string(out)
+		}
+	}
+	status := AgentStatus{Running: false}
+	inspectResult, err := a.Inspect(ctx, tmuxSession)
+	if err == nil {
+		status = *inspectResult
+	}
+	stateData := fmt.Sprintf(`{"tmux_output_length":%d,"running":%v}`, len(output), status.Running)
 	return &CheckpointData{
 		Phase:     "running",
-		StateData: "{}",
+		StateData: stateData,
 	}, nil
 }
 

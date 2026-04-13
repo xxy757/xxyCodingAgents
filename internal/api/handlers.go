@@ -178,6 +178,141 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tasks)
 }
 
+func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
+	runID := r.PathValue("id")
+	run, err := s.repos.Runs.GetByID(runID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to get run")
+		return
+	}
+	if run == nil {
+		writeError(w, http.StatusNotFound, "run not found")
+		return
+	}
+
+	tasks, _ := s.repos.Tasks.ListByRun(runID)
+	if tasks == nil {
+		tasks = []*domain.Task{}
+	}
+
+	type NodeData struct {
+		Label    string `json:"label"`
+		Status   string `json:"status"`
+		TaskType string `json:"task_type"`
+		TaskID   string `json:"task_id"`
+	}
+	type EdgeData struct {
+		ID     string `json:"id"`
+		Source string `json:"source"`
+		Target string `json:"target"`
+	}
+	type WorkflowGraph struct {
+		Nodes []struct {
+			ID     string   `json:"id"`
+			Type   string   `json:"type"`
+			Data   NodeData `json:"data"`
+			Position struct {
+				X float64 `json:"x"`
+				Y float64 `json:"y"`
+			} `json:"position"`
+		} `json:"nodes"`
+		Edges []EdgeData `json:"edges"`
+	}
+
+	graph := WorkflowGraph{}
+
+	if run.WorkflowTemplateID != "" {
+		template, _ := s.repos.WorkflowTemplates.GetByID(run.WorkflowTemplateID)
+		if template != nil {
+			var nodes []domain.WorkflowNode
+			json.Unmarshal([]byte(template.NodesJSON), &nodes)
+			var edges []domain.WorkflowEdge
+			if template.EdgesJSON != "" {
+				json.Unmarshal([]byte(template.EdgesJSON), &edges)
+			}
+
+			nodeStatusMap := make(map[string]string)
+			nodeTaskIDMap := make(map[string]string)
+			for _, t := range tasks {
+				for _, n := range nodes {
+					if t.TaskSpecID == n.TaskSpecID {
+						nodeStatusMap[n.ID] = string(t.Status)
+						nodeTaskIDMap[n.ID] = t.ID
+					}
+				}
+			}
+
+			for i, n := range nodes {
+				graph.Nodes = append(graph.Nodes, struct {
+					ID       string   `json:"id"`
+					Type     string   `json:"type"`
+					Data     NodeData `json:"data"`
+					Position struct {
+						X float64 `json:"x"`
+						Y float64 `json:"y"`
+					} `json:"position"`
+				}{
+					ID:   n.ID,
+					Type: "task",
+					Data: NodeData{
+						Label:    n.Label,
+						Status:   nodeStatusMap[n.ID],
+						TaskType: n.Label,
+						TaskID:   nodeTaskIDMap[n.ID],
+					},
+					Position: struct {
+						X float64 `json:"x"`
+						Y float64 `json:"y"`
+					}{
+						X: float64(i % 4) * 250,
+						Y: float64(i/4) * 120,
+					},
+				})
+			}
+
+			for i, e := range edges {
+				graph.Edges = append(graph.Edges, EdgeData{
+					ID:     fmt.Sprintf("edge-%d", i),
+					Source: e.From,
+					Target: e.To,
+				})
+			}
+		}
+	}
+
+	if len(graph.Nodes) == 0 {
+		for i, t := range tasks {
+			graph.Nodes = append(graph.Nodes, struct {
+				ID       string   `json:"id"`
+				Type     string   `json:"type"`
+				Data     NodeData `json:"data"`
+				Position struct {
+					X float64 `json:"x"`
+					Y float64 `json:"y"`
+				} `json:"position"`
+			}{
+				ID:   t.ID,
+				Type: "task",
+				Data: NodeData{
+					Label:    t.Title,
+					Status:   string(t.Status),
+					TaskType: t.TaskType,
+					TaskID:   t.ID,
+				},
+				Position: struct {
+					X float64 `json:"x"`
+					Y float64 `json:"y"`
+				}{
+					X: float64(i % 4) * 250,
+					Y: float64(i/4) * 120,
+				},
+			})
+		}
+	}
+
+	writeJSON(w, http.StatusOK, graph)
+}
+
 func (s *Server) handleRetryTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	task, err := s.repos.Tasks.GetByID(id)
@@ -295,6 +430,10 @@ func (s *Server) handlePauseAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "agent not found")
 		return
 	}
+	if agent.Status == domain.AgentStatusPaused {
+		writeJSON(w, http.StatusOK, agent)
+		return
+	}
 	if agent.Status != domain.AgentStatusRunning {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot pause agent in %s state", agent.Status))
 		return
@@ -316,6 +455,10 @@ func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
 	}
 	if agent == nil {
 		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
+	if agent.Status == domain.AgentStatusRunning {
+		writeJSON(w, http.StatusOK, agent)
 		return
 	}
 	if agent.Status != domain.AgentStatusPaused {
@@ -341,7 +484,7 @@ func (s *Server) handleStopAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "agent not found")
 		return
 	}
-	if agent.Status == domain.AgentStatusStopped {
+	if agent.Status == domain.AgentStatusStopped || agent.Status == domain.AgentStatusFailed {
 		writeJSON(w, http.StatusOK, agent)
 		return
 	}

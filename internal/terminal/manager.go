@@ -4,14 +4,25 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 )
 
-type Manager struct{}
+type Manager struct {
+	logRoot string
+	mu      sync.Mutex
+}
 
 func NewManager() *Manager {
-	return &Manager{}
+	return &Manager{logRoot: "data/logs"}
+}
+
+func NewManagerWithLogRoot(logRoot string) *Manager {
+	return &Manager{logRoot: logRoot}
 }
 
 func (m *Manager) CreateSession(ctx context.Context, name string) error {
@@ -90,4 +101,104 @@ func (m *Manager) GetPanePID(ctx context.Context, session string) (int, error) {
 	var pid int
 	fmt.Sscanf(strings.TrimSpace(string(out)), "%d", &pid)
 	return pid, nil
+}
+
+func (m *Manager) CaptureAndPersist(ctx context.Context, session string) error {
+	output, err := m.CapturePane(ctx, session)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(output) == "" {
+		return nil
+	}
+	return m.appendToLog(session, output)
+}
+
+func (m *Manager) appendToLog(session string, output string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if err := os.MkdirAll(m.logRoot, 0755); err != nil {
+		return fmt.Errorf("create log directory: %w", err)
+	}
+
+	logPath := filepath.Join(m.logRoot, session+".log")
+	f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("open log file %s: %w", logPath, err)
+	}
+	defer f.Close()
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	_, err = fmt.Fprintf(f, "[%s] %s", timestamp, output)
+	return err
+}
+
+func (m *Manager) ReadLog(session string, maxLines int) (string, error) {
+	logPath := filepath.Join(m.logRoot, session+".log")
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	lines := strings.Split(string(data), "\n")
+	if maxLines > 0 && len(lines) > maxLines {
+		lines = lines[len(lines)-maxLines:]
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+func (m *Manager) CleanupOldLogs(retentionDays int) error {
+	if retentionDays <= 0 {
+		return nil
+	}
+
+	entries, err := os.ReadDir(m.logRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().Before(cutoff) {
+			logPath := filepath.Join(m.logRoot, entry.Name())
+			os.Remove(logPath)
+			slog.Info("cleaned up old log file", "file", entry.Name(), "modified", info.ModTime())
+		}
+	}
+	return nil
+}
+
+func (m *Manager) TotalLogSize() (int64, error) {
+	var total int64
+	entries, err := os.ReadDir(m.logRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		total += info.Size()
+	}
+	return total, nil
 }

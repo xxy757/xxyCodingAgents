@@ -4,6 +4,8 @@ import (
 	"context"
 	"flag"
 	"log/slog"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +13,7 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/api"
 	"github.com/xxy757/xxyCodingAgents/internal/config"
 	"github.com/xxy757/xxyCodingAgents/internal/orchestrator"
+	agentruntime "github.com/xxy757/xxyCodingAgents/internal/runtime"
 	"github.com/xxy757/xxyCodingAgents/internal/scheduler"
 	"github.com/xxy757/xxyCodingAgents/internal/storage"
 	"github.com/xxy757/xxyCodingAgents/internal/terminal"
@@ -60,8 +63,11 @@ func main() {
 		slog.Error("startup reconciler", "error", err)
 	}
 
-	sched := scheduler.NewScheduler(cfg, repos)
+	sched := scheduler.NewScheduler(cfg, repos, agentruntime.NewGenericShellAdapter(), termMgr)
 	go sched.Run(ctx)
+
+	watchdog := scheduler.NewWatchdog(cfg, repos, agentruntime.NewGenericShellAdapter(), termMgr)
+	go watchdog.Run(ctx)
 
 	server := api.NewServer(cfg, db, repos, orch, termMgr)
 
@@ -74,8 +80,20 @@ func main() {
 		}
 	}()
 
+	go func() {
+		pprofAddr := cfg.Server.PprofAddr
+		if pprofAddr == "" {
+			pprofAddr = "localhost:6060"
+		}
+		slog.Info("pprof server starting", "addr", pprofAddr)
+		if err := http.ListenAndServe(pprofAddr, nil); err != nil {
+			slog.Error("pprof server error", "error", err)
+		}
+	}()
+
 	sig := <-sigCh
 	slog.Info("received signal, shutting down", "signal", sig)
 	cancel()
 	sched.Stop()
+	watchdog.Stop()
 }

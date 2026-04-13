@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,6 +20,7 @@ type Config struct {
 
 type ServerConfig struct {
 	HTTPAddr        string   `yaml:"http_addr"`
+	PprofAddr       string   `yaml:"pprof_addr"`
 	AllowedOrigins  []string `yaml:"allowed_origins"`
 }
 
@@ -48,9 +50,10 @@ type ThresholdsConfig struct {
 }
 
 type TimeoutsConfig struct {
-	HeartbeatTimeoutSeconds    int `yaml:"heartbeat_timeout_seconds"`
-	StallTimeoutSeconds        int `yaml:"stall_timeout_seconds"`
-	CheckpointIntervalSeconds  int `yaml:"checkpoint_interval_seconds"`
+	HeartbeatTimeoutSeconds   int `yaml:"heartbeat_timeout_seconds"`
+	OutputTimeoutSeconds      int `yaml:"output_timeout_seconds"`
+	StallTimeoutSeconds       int `yaml:"stall_timeout_seconds"`
+	CheckpointIntervalSeconds int `yaml:"checkpoint_interval_seconds"`
 }
 
 type SQLiteConfig struct {
@@ -76,6 +79,8 @@ func (s *SchedulerConfig) TickDuration() time.Duration {
 }
 
 func Load(path string) (*Config, error) {
+	godotenv.Load()
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
@@ -94,6 +99,9 @@ func Load(path string) (*Config, error) {
 func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("AI_DEV_HTTP_ADDR"); v != "" {
 		c.Server.HTTPAddr = v
+	}
+	if v := os.Getenv("AI_DEV_PPROF_ADDR"); v != "" {
+		c.Server.PprofAddr = v
 	}
 	if v := os.Getenv("AI_DEV_SQLITE_PATH"); v != "" {
 		c.SQLite.Path = v
@@ -169,6 +177,9 @@ func (c *Config) setDefaults() {
 	}
 	if c.Timeouts.HeartbeatTimeoutSeconds == 0 {
 		c.Timeouts.HeartbeatTimeoutSeconds = 30
+	}
+	if c.Timeouts.OutputTimeoutSeconds == 0 {
+		c.Timeouts.OutputTimeoutSeconds = 900
 	}
 	if c.Timeouts.StallTimeoutSeconds == 0 {
 		c.Timeouts.StallTimeoutSeconds = 900

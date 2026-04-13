@@ -53,6 +53,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/projects/{id}/runs", s.handleListRuns)
 
 	s.mux.HandleFunc("GET /api/runs/{id}/tasks", s.handleListTasks)
+	s.mux.HandleFunc("GET /api/runs/{id}/workflow", s.handleRunWorkflow)
 	s.mux.HandleFunc("POST /api/tasks/{id}/retry", s.handleRetryTask)
 	s.mux.HandleFunc("POST /api/tasks/{id}/cancel", s.handleCancelTask)
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 
 interface TerminalSession {
@@ -102,6 +103,7 @@ export default function TerminalsPage() {
               <th className="pb-2">tmux 会话</th>
               <th className="pb-2">状态</th>
               <th className="pb-2">创建时间</th>
+              <th className="pb-2">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -122,6 +124,14 @@ export default function TerminalsPage() {
                   </span>
                 </td>
                 <td className="py-2 text-sm">{new Date(ts.created_at).toLocaleString()}</td>
+                <td className="py-2 text-sm">
+                  <Link
+                    href={`/terminals/${ts.id}`}
+                    className="text-blue-600 hover:underline"
+                  >
+                    打开
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
