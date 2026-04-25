@@ -1,3 +1,6 @@
+// Package scheduler 的 watchdog 文件实现看门狗机制。
+// Watchdog 定期检查所有活跃 Agent 的存活状态，
+// 通过 tmux 会话探测、心跳超时和输出超时来检测死亡的 Agent。
 package scheduler
 
 import (
@@ -14,6 +17,7 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/terminal"
 )
 
+// Watchdog 是 Agent 存活监控器，定期检查并处理死亡的 Agent。
 type Watchdog struct {
 	cfg      *config.Config
 	repos    *storage.Repos
@@ -22,6 +26,7 @@ type Watchdog struct {
 	stop     chan struct{}
 }
 
+// NewWatchdog 创建看门狗实例。
 func NewWatchdog(cfg *config.Config, repos *storage.Repos, rt agentruntime.AgentRuntime, tm *terminal.Manager) *Watchdog {
 	return &Watchdog{
 		cfg:      cfg,
@@ -32,6 +37,7 @@ func NewWatchdog(cfg *config.Config, repos *storage.Repos, rt agentruntime.Agent
 	}
 }
 
+// Run 启动看门狗的定期检查循环。
 func (w *Watchdog) Run(ctx context.Context) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
@@ -52,10 +58,12 @@ func (w *Watchdog) Run(ctx context.Context) {
 	}
 }
 
+// Stop 停止看门狗。
 func (w *Watchdog) Stop() {
 	close(w.stop)
 }
 
+// check 执行一次 Agent 存活检查。
 func (w *Watchdog) check(ctx context.Context) {
 	agents, err := w.repos.AgentInstances.ListActiveWithTasks()
 	if err != nil {
@@ -64,6 +72,7 @@ func (w *Watchdog) check(ctx context.Context) {
 	}
 
 	now := time.Now()
+	// 获取超时配置
 	heartbeatTimeout := time.Duration(w.cfg.Timeouts.HeartbeatTimeoutSeconds) * time.Second
 	if heartbeatTimeout == 0 {
 		heartbeatTimeout = 30 * time.Second
@@ -77,23 +86,28 @@ func (w *Watchdog) check(ctx context.Context) {
 		agent := entry.Agent
 		task := entry.Task
 
+		// 只检查正在启动或运行中的 Agent
 		if agent.Status != domain.AgentStatusRunning && agent.Status != domain.AgentStatusStarting {
 			continue
 		}
 
+		// 通过运行时接口检查 Agent 进程是否存活
 		inspectResult, err := w.runtime.Inspect(ctx, agent.TmuxSession)
 		if err != nil {
 			slog.Warn("watchdog: inspect agent", "agent_id", agent.ID, "error", err)
 			continue
 		}
 
+		// 进程已死亡
 		if !inspectResult.Running {
 			w.handleDeadAgent(ctx, agent, task, "process_crashed")
 			continue
 		}
 
+		// 更新心跳时间
 		w.repos.AgentInstances.UpdateHeartbeat(agent.ID)
 
+		// 检查心跳超时
 		if agent.LastHeartbeatAt != nil {
 			elapsed := now.Sub(*agent.LastHeartbeatAt)
 			if elapsed > heartbeatTimeout {
@@ -102,6 +116,7 @@ func (w *Watchdog) check(ctx context.Context) {
 			}
 		}
 
+		// 检查输出超时
 		if agent.LastOutputAt != nil {
 			elapsed := now.Sub(*agent.LastOutputAt)
 			if elapsed > outputTimeout {
@@ -112,9 +127,11 @@ func (w *Watchdog) check(ctx context.Context) {
 	}
 }
 
+// handleDeadAgent 处理死亡的 Agent，根据重启策略决定标记为失败还是可恢复。
 func (w *Watchdog) handleDeadAgent(ctx context.Context, agent *domain.AgentInstance, task *domain.Task, reason string) {
 	slog.Warn("watchdog: agent dead", "agent_id", agent.ID, "reason", reason, "tmux_session", agent.TmuxSession)
 
+	// 根据任务的重启策略决定新状态
 	newStatus := domain.AgentStatusFailed
 	if task.RestartPolicy == "always" || task.RestartPolicy == "on-failure" {
 		newStatus = domain.AgentStatusRecoverable
@@ -123,6 +140,7 @@ func (w *Watchdog) handleDeadAgent(ctx context.Context, agent *domain.AgentInsta
 	w.repos.AgentInstances.UpdateStatus(agent.ID, newStatus)
 	w.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusFailed)
 
+	// 记录 Agent 失败事件
 	w.repos.Events.Create(&domain.Event{
 		ID:        uuid.New().String(),
 		RunID:     agent.RunID,

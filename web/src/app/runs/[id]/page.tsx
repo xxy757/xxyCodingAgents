@@ -1,3 +1,6 @@
+// runs/[id]/page.tsx - 运行详情页面
+// 展示单个运行的任务列表、事件时间线和工作流图（ReactFlow）。
+// 支持任务重试和取消操作。
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
@@ -16,6 +19,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
+// Task 任务数据接口
 interface Task {
   id: string;
   run_id: string;
@@ -28,6 +32,7 @@ interface Task {
   created_at: string;
 }
 
+// Event 事件数据接口
 interface Event {
   id: string;
   run_id: string;
@@ -38,6 +43,7 @@ interface Event {
   created_at: string;
 }
 
+// Run 运行数据接口
 interface Run {
   id: string;
   project_id: string;
@@ -46,6 +52,7 @@ interface Run {
   created_at: string;
 }
 
+// WorkflowGraph 工作流图数据接口（ReactFlow 兼容格式）
 interface WorkflowGraph {
   nodes: {
     id: string;
@@ -56,6 +63,7 @@ interface WorkflowGraph {
   edges: { id: string; source: string; target: string }[];
 }
 
+// statusBorderColor 根据任务状态返回边框颜色
 function statusBorderColor(status: string): string {
   switch (status) {
     case "running":
@@ -75,6 +83,7 @@ function statusBorderColor(status: string): string {
   }
 }
 
+// statusBgColor 根据任务状态返回背景颜色
 function statusBgColor(status: string): string {
   switch (status) {
     case "running":
@@ -94,6 +103,7 @@ function statusBgColor(status: string): string {
   }
 }
 
+// TaskNode 是工作流图中的任务节点组件
 function TaskNode({ data }: { data: { label: string; status: string; task_type: string } }) {
   const borderColor = statusBorderColor(data.status);
   const bgColor = statusBgColor(data.status);
@@ -129,10 +139,12 @@ function TaskNode({ data }: { data: { label: string; status: string; task_type: 
   );
 }
 
+// 注册自定义节点类型
 const nodeTypes: NodeTypes = {
   task: TaskNode as any,
 };
 
+// RunDetailPage 运行详情页面组件
 export default function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string>("");
   const [run, setRun] = useState<Run | null>(null);
@@ -143,10 +155,12 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
   const [workflowGraph, setWorkflowGraph] = useState<WorkflowGraph | null>(null);
   const router = useRouter();
 
+  // 解析异步参数获取运行 ID
   useEffect(() => {
     params.then((p) => setId(p.id));
   }, [params]);
 
+  // 加载运行详情、任务列表、事件时间线和工作流图
   useEffect(() => {
     if (!id) return;
     apiFetch<Run>(`/api/runs/${id}`)
@@ -166,6 +180,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       .catch(() => {});
   }, [id]);
 
+  // handleRetry 重试失败或被驱逐的任务
   const handleRetry = async (taskId: string) => {
     try {
       await apiFetch(`/api/tasks/${taskId}/retry`, { method: "POST" });
@@ -175,6 +190,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     }
   };
 
+  // handleCancel 取消排队或运行中的任务
   const handleCancel = async (taskId: string) => {
     try {
       await apiFetch(`/api/tasks/${taskId}/cancel`, { method: "POST" });
@@ -184,6 +200,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     }
   };
 
+  // taskStatusColor 根据任务状态返回表格中的样式类名
   const taskStatusColor = (status: string) => {
     switch (status) {
       case "running":
@@ -218,6 +235,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="p-6">
+      {/* 页头：返回按钮、标题和状态 */}
       <div className="flex items-center gap-4 mb-6">
         <button onClick={() => router.back()} className="text-blue-600 hover:underline text-sm">
           ← 返回
@@ -234,6 +252,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
       )}
 
+      {/* 标签页切换 */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setActiveTab("tasks")}
@@ -261,6 +280,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
         </button>
       </div>
 
+      {/* 任务列表标签页 */}
       {activeTab === "tasks" && (
         <div>
           {tasks.length === 0 ? (
@@ -319,6 +339,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
         </div>
       )}
 
+      {/* 事件时间线标签页 */}
       {activeTab === "timeline" && (
         <div>
           {events.length === 0 ? (
@@ -349,6 +370,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
         </div>
       )}
 
+      {/* 工作流图标签页（ReactFlow） */}
       {activeTab === "workflow" && (
         <div>
           {!workflowGraph || workflowGraph.nodes.length === 0 ? (

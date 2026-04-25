@@ -1,3 +1,5 @@
+// Package terminal 提供 tmux 终端会话管理功能。
+// 支持创建/销毁会话、捕获终端输出、发送按键、日志持久化和清理。
 package terminal
 
 import (
@@ -12,19 +14,23 @@ import (
 	"time"
 )
 
+// Manager 管理 tmux 终端会话，提供会话生命周期管理和日志持久化。
 type Manager struct {
-	logRoot string
-	mu      sync.Mutex
+	logRoot string     // 日志文件存储根目录
+	mu      sync.Mutex // 保护并发写入日志文件
 }
 
+// NewManager 创建终端管理器实例，使用默认日志目录。
 func NewManager() *Manager {
 	return &Manager{logRoot: "data/logs"}
 }
 
+// NewManagerWithLogRoot 创建终端管理器实例，指定日志目录。
 func NewManagerWithLogRoot(logRoot string) *Manager {
 	return &Manager{logRoot: logRoot}
 }
 
+// CreateSession 创建一个新的 tmux 会话（分离模式）。
 func (m *Manager) CreateSession(ctx context.Context, name string) error {
 	cmd := exec.CommandContext(ctx, "tmux", "new-session", "-d", "-s", name)
 	out, err := cmd.CombinedOutput()
@@ -35,6 +41,7 @@ func (m *Manager) CreateSession(ctx context.Context, name string) error {
 	return nil
 }
 
+// KillSession 终止指定名称的 tmux 会话。
 func (m *Manager) KillSession(ctx context.Context, name string) error {
 	cmd := exec.CommandContext(ctx, "tmux", "kill-session", "-t", name)
 	out, err := cmd.CombinedOutput()
@@ -45,6 +52,7 @@ func (m *Manager) KillSession(ctx context.Context, name string) error {
 	return nil
 }
 
+// ListSessions 列出当前所有 tmux 会话名称。
 func (m *Manager) ListSessions(ctx context.Context) ([]string, error) {
 	cmd := exec.CommandContext(ctx, "tmux", "list-sessions", "-F", "#{session_name}")
 	out, err := cmd.Output()
@@ -61,6 +69,7 @@ func (m *Manager) ListSessions(ctx context.Context) ([]string, error) {
 	return sessions, nil
 }
 
+// SessionExists 检查指定名称的 tmux 会话是否存在。
 func (m *Manager) SessionExists(ctx context.Context, name string) bool {
 	sessions, err := m.ListSessions(ctx)
 	if err != nil {
@@ -74,6 +83,7 @@ func (m *Manager) SessionExists(ctx context.Context, name string) bool {
 	return false
 }
 
+// SendKeys 向指定 tmux 会话发送按键序列（附加 Enter）。
 func (m *Manager) SendKeys(ctx context.Context, session string, keys string) error {
 	cmd := exec.CommandContext(ctx, "tmux", "send-keys", "-t", session, keys, "Enter")
 	out, err := cmd.CombinedOutput()
@@ -83,6 +93,7 @@ func (m *Manager) SendKeys(ctx context.Context, session string, keys string) err
 	return nil
 }
 
+// CapturePane 捕获指定 tmux 会话当前终端面板的全部内容。
 func (m *Manager) CapturePane(ctx context.Context, session string) (string, error) {
 	cmd := exec.CommandContext(ctx, "tmux", "capture-pane", "-t", session, "-p")
 	out, err := cmd.Output()
@@ -92,6 +103,7 @@ func (m *Manager) CapturePane(ctx context.Context, session string) (string, erro
 	return string(out), nil
 }
 
+// GetPanePID 获取指定 tmux 会话中主面板的进程 ID。
 func (m *Manager) GetPanePID(ctx context.Context, session string) (int, error) {
 	cmd := exec.CommandContext(ctx, "tmux", "list-panes", "-t", session, "-F", "#{pane_pid}")
 	out, err := cmd.Output()
@@ -103,6 +115,7 @@ func (m *Manager) GetPanePID(ctx context.Context, session string) (int, error) {
 	return pid, nil
 }
 
+// CaptureAndPersist 捕获终端输出并追加到日志文件。
 func (m *Manager) CaptureAndPersist(ctx context.Context, session string) error {
 	output, err := m.CapturePane(ctx, session)
 	if err != nil {
@@ -114,6 +127,7 @@ func (m *Manager) CaptureAndPersist(ctx context.Context, session string) error {
 	return m.appendToLog(session, output)
 }
 
+// appendToLog 将终端输出追加到对应的日志文件中。
 func (m *Manager) appendToLog(session string, output string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -134,6 +148,7 @@ func (m *Manager) appendToLog(session string, output string) error {
 	return err
 }
 
+// ReadLog 读取指定会话的日志文件内容，可限制最大行数。
 func (m *Manager) ReadLog(session string, maxLines int) (string, error) {
 	logPath := filepath.Join(m.logRoot, session+".log")
 	data, err := os.ReadFile(logPath)
@@ -150,6 +165,7 @@ func (m *Manager) ReadLog(session string, maxLines int) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+// CleanupOldLogs 清理超过保留天数的日志文件。
 func (m *Manager) CleanupOldLogs(retentionDays int) error {
 	if retentionDays <= 0 {
 		return nil
@@ -181,6 +197,7 @@ func (m *Manager) CleanupOldLogs(retentionDays int) error {
 	return nil
 }
 
+// TotalLogSize 计算日志目录下所有日志文件的总大小。
 func (m *Manager) TotalLogSize() (int64, error) {
 	var total int64
 	entries, err := os.ReadDir(m.logRoot)

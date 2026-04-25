@@ -1,8 +1,11 @@
+// projects/page.tsx - 项目管理页面
+// 展示项目列表，支持创建新项目。
 "use client";
 
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 
+// Project 项目数据接口
 interface Project {
   id: string;
   name: string;
@@ -11,6 +14,7 @@ interface Project {
   created_at: string;
 }
 
+// ProjectsPage 项目管理页面组件
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +25,7 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // 页面加载时获取项目列表
   useEffect(() => {
     setLoading(true);
     apiFetch<Project[]>("/api/projects")
@@ -32,6 +37,7 @@ export default function ProjectsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // handleCreate 处理创建项目表单提交
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -70,6 +76,7 @@ export default function ProjectsPage() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
       )}
 
+      {/* 新建项目表单 */}
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
           <div>
@@ -113,6 +120,7 @@ export default function ProjectsPage() {
         </form>
       )}
 
+      {/* 项目列表表格 */}
       {loading ? (
         <div className="text-gray-500">加载中...</div>
       ) : projects.length === 0 ? (

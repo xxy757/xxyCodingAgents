@@ -1,8 +1,11 @@
+// Sidebar.tsx - 应用侧边栏导航组件
+// 提供主导航菜单，高亮当前路由对应的导航项。
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+// navItems 定义导航菜单项，包含路径、显示标签和图标
 const navItems = [
   { href: "/", label: "仪表盘", icon: "▦" },
   { href: "/projects", label: "项目", icon: "▣" },
@@ -12,15 +15,18 @@ const navItems = [
   { href: "/system", label: "系统", icon: "◉" },
 ];
 
+// Sidebar 是应用的侧边栏导航组件
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
     <aside className="w-56 bg-slate-900 text-white flex flex-col">
+      {/* 品牌区域 */}
       <div className="p-4 border-b border-slate-700">
         <h1 className="text-lg font-bold">AI Dev Platform</h1>
         <p className="text-xs text-slate-400 mt-1">开发调度控制台</p>
       </div>
+      {/* 导航链接列表 */}
       <nav className="flex-1 p-2">
         {navItems.map((item) => (
           <Link
@@ -37,6 +43,7 @@ export function Sidebar() {
           </Link>
         ))}
       </nav>
+      {/* 版本信息 */}
       <div className="p-4 border-t border-slate-700 text-xs text-slate-500">
         v0.1.0 MVP
       </div>

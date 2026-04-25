@@ -1,3 +1,5 @@
+// Package config 提供应用程序配置的加载和管理功能。
+// 支持从 YAML 文件读取配置，通过环境变量覆盖，并为所有配置项提供合理的默认值。
 package config
 
 import (
@@ -9,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config 是应用程序的顶层配置结构，包含所有子模块的配置。
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	Runtime    RuntimeConfig    `yaml:"runtime"`
@@ -18,67 +21,79 @@ type Config struct {
 	SQLite     SQLiteConfig     `yaml:"sqlite"`
 }
 
+// ServerConfig 定义 HTTP 服务器相关配置。
 type ServerConfig struct {
-	HTTPAddr        string   `yaml:"http_addr"`
-	PprofAddr       string   `yaml:"pprof_addr"`
-	AllowedOrigins  []string `yaml:"allowed_origins"`
+	HTTPAddr        string   `yaml:"http_addr"`        // API 服务监听地址，如 ":8080"
+	PprofAddr       string   `yaml:"pprof_addr"`       // pprof 性能分析服务监听地址
+	AllowedOrigins  []string `yaml:"allowed_origins"`  // CORS 允许的来源域名列表
 }
 
+// RuntimeConfig 定义运行时目录路径配置。
 type RuntimeConfig struct {
-	WorkspaceRoot   string `yaml:"workspace_root"`
-	LogRoot         string `yaml:"log_root"`
-	CheckpointRoot  string `yaml:"checkpoint_root"`
+	WorkspaceRoot   string `yaml:"workspace_root"`    // Agent 工作区的根目录
+	LogRoot         string `yaml:"log_root"`          // 日志文件存储根目录
+	CheckpointRoot  string `yaml:"checkpoint_root"`   // 检查点文件存储根目录
 }
 
+// SchedulerConfig 定义调度器相关配置。
 type SchedulerConfig struct {
-	TickSeconds        int `yaml:"tick_seconds"`
-	MaxConcurrentAgents int `yaml:"max_concurrent_agents"`
-	MaxHeavyAgents     int `yaml:"max_heavy_agents"`
-	MaxTestJobs        int `yaml:"max_test_jobs"`
+	TickSeconds        int `yaml:"tick_seconds"`          // 调度器轮询间隔（秒）
+	MaxConcurrentAgents int `yaml:"max_concurrent_agents"` // 最大并发 Agent 数量
+	MaxHeavyAgents     int `yaml:"max_heavy_agents"`      // 最大重型（高资源）Agent 数量
+	MaxTestJobs        int `yaml:"max_test_jobs"`         // 最大测试任务数量
 }
 
+// ThresholdsConfig 定义资源阈值和清理策略配置。
 type ThresholdsConfig struct {
-	WarnMemoryPercent        int `yaml:"warn_memory_percent"`
-	HighMemoryPercent        int `yaml:"high_memory_percent"`
-	CriticalMemoryPercent    int `yaml:"critical_memory_percent"`
-	DiskWarnPercent          int `yaml:"disk_warn_percent"`
-	DiskHighPercent          int `yaml:"disk_high_percent"`
-	WorkspaceMaxSizeMB       int `yaml:"workspace_max_size_mb"`
-	LogRetentionDays         int `yaml:"log_retention_days"`
-	MaxTotalLogSizeMB        int `yaml:"max_total_log_size_mb"`
-	MaxChildProcessesPerAgent int `yaml:"max_child_processes_per_agent"`
+	WarnMemoryPercent        int `yaml:"warn_memory_percent"`         // 内存使用率告警阈值（%）
+	HighMemoryPercent        int `yaml:"high_memory_percent"`         // 内存使用率高水位（%），触发负载保护
+	CriticalMemoryPercent    int `yaml:"critical_memory_percent"`     // 内存使用率临界值（%），触发驱逐
+	DiskWarnPercent          int `yaml:"disk_warn_percent"`           // 磁盘使用率告警阈值（%）
+	DiskHighPercent          int `yaml:"disk_high_percent"`           // 磁盘使用率高水位（%）
+	WorkspaceMaxSizeMB       int `yaml:"workspace_max_size_mb"`       // 单个工作区最大体积（MB）
+	LogRetentionDays         int `yaml:"log_retention_days"`          // 日志保留天数
+	MaxTotalLogSizeMB        int `yaml:"max_total_log_size_mb"`       // 日志总大小上限（MB）
+	MaxChildProcessesPerAgent int `yaml:"max_child_processes_per_agent"` // 每个 Agent 最大子进程数
 }
 
+// TimeoutsConfig 定义各类超时时间配置。
 type TimeoutsConfig struct {
-	HeartbeatTimeoutSeconds   int `yaml:"heartbeat_timeout_seconds"`
-	OutputTimeoutSeconds      int `yaml:"output_timeout_seconds"`
-	StallTimeoutSeconds       int `yaml:"stall_timeout_seconds"`
-	CheckpointIntervalSeconds int `yaml:"checkpoint_interval_seconds"`
+	HeartbeatTimeoutSeconds   int `yaml:"heartbeat_timeout_seconds"`    // Agent 心跳超时时间（秒）
+	OutputTimeoutSeconds      int `yaml:"output_timeout_seconds"`       // Agent 输出超时时间（秒）
+	StallTimeoutSeconds       int `yaml:"stall_timeout_seconds"`        // Agent 停滞超时时间（秒）
+	CheckpointIntervalSeconds int `yaml:"checkpoint_interval_seconds"` // 定期检查点间隔（秒）
 }
 
+// SQLiteConfig 定义 SQLite 数据库连接配置。
 type SQLiteConfig struct {
-	Path         string `yaml:"path"`
-	WALMode      bool   `yaml:"wal_mode"`
-	BusyTimeoutMs int   `yaml:"busy_timeout_ms"`
+	Path         string `yaml:"path"`           // 数据库文件路径
+	WALMode      bool   `yaml:"wal_mode"`       // 是否启用 WAL 日志模式
+	BusyTimeoutMs int   `yaml:"busy_timeout_ms"` // 数据库忙等待超时（毫秒）
 }
 
+// HeartbeatTimeout 将心跳超时秒数转换为 time.Duration。
 func (t *TimeoutsConfig) HeartbeatTimeout() time.Duration {
 	return time.Duration(t.HeartbeatTimeoutSeconds) * time.Second
 }
 
+// StallTimeout 将停滞超时秒数转换为 time.Duration。
 func (t *TimeoutsConfig) StallTimeout() time.Duration {
 	return time.Duration(t.StallTimeoutSeconds) * time.Second
 }
 
+// CheckpointInterval 将检查点间隔秒数转换为 time.Duration。
 func (t *TimeoutsConfig) CheckpointInterval() time.Duration {
 	return time.Duration(t.CheckpointIntervalSeconds) * time.Second
 }
 
+// TickDuration 将调度器轮询间隔秒数转换为 time.Duration。
 func (s *SchedulerConfig) TickDuration() time.Duration {
 	return time.Duration(s.TickSeconds) * time.Second
 }
 
+// Load 从指定路径加载 YAML 配置文件，并应用环境变量覆盖和默认值。
 func Load(path string) (*Config, error) {
+	// 加载 .env 文件（如存在）
 	godotenv.Load()
 
 	data, err := os.ReadFile(path)
@@ -91,11 +106,14 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("parse config file: %w", err)
 	}
 
+	// 应用环境变量覆盖
 	cfg.applyEnvOverrides()
+	// 填充零值字段的默认值
 	cfg.setDefaults()
 	return &cfg, nil
 }
 
+// applyEnvOverrides 使用环境变量覆盖配置项，支持运行时动态配置。
 func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("AI_DEV_HTTP_ADDR"); v != "" {
 		c.Server.HTTPAddr = v
@@ -117,6 +135,7 @@ func (c *Config) applyEnvOverrides() {
 	}
 }
 
+// setDefaults 为零值配置字段设置合理的默认值。
 func (c *Config) setDefaults() {
 	if c.Server.HTTPAddr == "" {
 		c.Server.HTTPAddr = ":8080"

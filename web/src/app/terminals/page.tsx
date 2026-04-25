@@ -1,9 +1,12 @@
+// terminals/page.tsx - 终端管理页面
+// 展示终端会话列表，支持创建新终端会话。
 "use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 
+// TerminalSession 终端会话数据接口
 interface TerminalSession {
   id: string;
   task_id: string;
@@ -12,6 +15,7 @@ interface TerminalSession {
   created_at: string;
 }
 
+// TerminalsPage 终端管理页面组件
 export default function TerminalsPage() {
   const [terminals, setTerminals] = useState<TerminalSession[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +24,7 @@ export default function TerminalsPage() {
   const [taskId, setTaskId] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // 加载终端会话列表
   useEffect(() => {
     setLoading(true);
     apiFetch<TerminalSession[]>("/api/terminals")
@@ -31,6 +36,7 @@ export default function TerminalsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  // handleCreate 处理创建终端会话表单提交
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -67,6 +73,7 @@ export default function TerminalsPage() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
       )}
 
+      {/* 新建终端表单 */}
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
           <div>
@@ -90,6 +97,7 @@ export default function TerminalsPage() {
         </form>
       )}
 
+      {/* 终端会话列表 */}
       {loading ? (
         <div className="text-gray-500">加载中...</div>
       ) : terminals.length === 0 ? (

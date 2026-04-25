@@ -1,3 +1,5 @@
+// Package storage 的 repositories 文件实现所有领域实体的数据访问层。
+// 为项目、运行、任务、Agent 实例、事件、检查点、资源快照等提供 CRUD 操作。
 package storage
 
 import (
@@ -7,18 +9,24 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/domain"
 )
 
+// scanner 是 sql.Row 和 sql.Rows 的公共接口，用于统一扫描逻辑。
 type scanner interface {
 	Scan(dest ...any) error
 }
 
+// ==================== ProjectRepo ====================
+
+// ProjectRepo 提供项目实体的数据访问操作。
 type ProjectRepo struct {
 	db *DB
 }
 
+// NewProjectRepo 创建项目仓库实例。
 func NewProjectRepo(db *DB) *ProjectRepo {
 	return &ProjectRepo{db: db}
 }
 
+// Create 插入一个新项目记录。
 func (r *ProjectRepo) Create(p *domain.Project) error {
 	_, err := r.db.Exec(
 		"INSERT INTO projects (id, name, repo_url, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -27,6 +35,7 @@ func (r *ProjectRepo) Create(p *domain.Project) error {
 	return err
 }
 
+// GetByID 根据 ID 查询项目，未找到时返回 nil。
 func (r *ProjectRepo) GetByID(id string) (*domain.Project, error) {
 	p := &domain.Project{}
 	err := r.db.QueryRow(
@@ -38,6 +47,7 @@ func (r *ProjectRepo) GetByID(id string) (*domain.Project, error) {
 	return p, err
 }
 
+// List 查询所有项目，按创建时间降序排列。
 func (r *ProjectRepo) List() ([]*domain.Project, error) {
 	rows, err := r.db.Query("SELECT id, name, repo_url, description, created_at, updated_at FROM projects ORDER BY created_at DESC")
 	if err != nil {
@@ -56,14 +66,19 @@ func (r *ProjectRepo) List() ([]*domain.Project, error) {
 	return projects, nil
 }
 
+// ==================== RunRepo ====================
+
+// RunRepo 提供运行实体的数据访问操作。
 type RunRepo struct {
 	db *DB
 }
 
+// NewRunRepo 创建运行仓库实例。
 func NewRunRepo(db *DB) *RunRepo {
 	return &RunRepo{db: db}
 }
 
+// Create 插入一个新运行记录。
 func (r *RunRepo) Create(run *domain.Run) error {
 	_, err := r.db.Exec(
 		"INSERT INTO runs (id, project_id, workflow_template_id, title, description, status, external_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -72,6 +87,7 @@ func (r *RunRepo) Create(run *domain.Run) error {
 	return err
 }
 
+// GetByID 根据 ID 查询运行。
 func (r *RunRepo) GetByID(id string) (*domain.Run, error) {
 	run := &domain.Run{}
 	err := r.db.QueryRow(
@@ -83,6 +99,7 @@ func (r *RunRepo) GetByID(id string) (*domain.Run, error) {
 	return run, err
 }
 
+// ListByProject 查询指定项目下的所有运行。
 func (r *RunRepo) ListByProject(projectID string) ([]*domain.Run, error) {
 	rows, err := r.db.Query(
 		"SELECT id, project_id, workflow_template_id, title, description, status, external_key, created_at, updated_at FROM runs WHERE project_id = ? ORDER BY created_at DESC", projectID,
@@ -103,6 +120,7 @@ func (r *RunRepo) ListByProject(projectID string) ([]*domain.Run, error) {
 	return runs, nil
 }
 
+// ListAll 查询所有运行。
 func (r *RunRepo) ListAll() ([]*domain.Run, error) {
 	rows, err := r.db.Query(
 		"SELECT id, project_id, workflow_template_id, title, description, status, external_key, created_at, updated_at FROM runs ORDER BY created_at DESC",
@@ -123,6 +141,7 @@ func (r *RunRepo) ListAll() ([]*domain.Run, error) {
 	return runs, nil
 }
 
+// UpdateStatus 更新运行状态。
 func (r *RunRepo) UpdateStatus(id string, status domain.RunStatus) error {
 	_, err := r.db.Exec(
 		"UPDATE runs SET status = ?, updated_at = ? WHERE id = ?", status, time.Now(), id,
@@ -130,23 +149,29 @@ func (r *RunRepo) UpdateStatus(id string, status domain.RunStatus) error {
 	return err
 }
 
+// ==================== TaskRepo ====================
+
+// TaskRepo 提供任务实体的数据访问操作。
 type TaskRepo struct {
 	db *DB
 }
 
+// NewTaskRepo 创建任务仓库实例。
 func NewTaskRepo(db *DB) *TaskRepo {
 	return &TaskRepo{db: db}
 }
 
+// Create 插入一个新任务记录。
 func (r *TaskRepo) Create(t *domain.Task) error {
 	_, err := r.db.Exec(
 		`INSERT INTO tasks (id, run_id, task_spec_id, task_type, attempt_no, status, priority, queue_status, resource_class, preemptible, restart_policy, title, description, input_data, output_data, workspace_path, parent_task_id, started_at, completed_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		t.ID, t.RunID, t.TaskSpecID, t.TaskType, t.AttemptNo, t.Status, t.Priority, t.QueueStatus, t.ResourceClass, t.Preemptible, t.RestartPolicy, t.Title, t.Description, t.InputData, t.OutputData, t.WorkspacePath, t.ParentTaskID, t.StartedAt, t.CompletedAt, t.CreatedAt, t.UpdatedAt,
 	)
 	return err
 }
 
+// scanTask 是任务扫描的通用辅助函数。
 func scanTask(row scanner) (*domain.Task, error) {
 	t := &domain.Task{}
 	err := row.Scan(&t.ID, &t.RunID, &t.TaskSpecID, &t.TaskType, &t.AttemptNo, &t.Status, &t.Priority, &t.QueueStatus, &t.ResourceClass, &t.Preemptible, &t.RestartPolicy, &t.Title, &t.Description, &t.InputData, &t.OutputData, &t.WorkspacePath, &t.ParentTaskID, &t.StartedAt, &t.CompletedAt, &t.CreatedAt, &t.UpdatedAt)
@@ -156,18 +181,20 @@ func scanTask(row scanner) (*domain.Task, error) {
 	return t, err
 }
 
+// GetByID 根据 ID 查询任务。
 func (r *TaskRepo) GetByID(id string) (*domain.Task, error) {
 	row := r.db.QueryRow(
 		`SELECT id, run_id, task_spec_id, task_type, attempt_no, status, priority, queue_status, resource_class, preemptible, restart_policy, title, description, input_data, output_data, workspace_path, parent_task_id, started_at, completed_at, created_at, updated_at
-		 FROM tasks WHERE id = ?`, id,
+			 FROM tasks WHERE id = ?`, id,
 	)
 	return scanTask(row)
 }
 
+// ListByRun 查询指定运行下的所有任务，按创建时间升序排列。
 func (r *TaskRepo) ListByRun(runID string) ([]*domain.Task, error) {
 	rows, err := r.db.Query(
 		`SELECT id, run_id, task_spec_id, task_type, attempt_no, status, priority, queue_status, resource_class, preemptible, restart_policy, title, description, input_data, output_data, workspace_path, parent_task_id, started_at, completed_at, created_at, updated_at
-		 FROM tasks WHERE run_id = ? ORDER BY created_at ASC`, runID,
+			 FROM tasks WHERE run_id = ? ORDER BY created_at ASC`, runID,
 	)
 	if err != nil {
 		return nil, err
@@ -185,10 +212,11 @@ func (r *TaskRepo) ListByRun(runID string) ([]*domain.Task, error) {
 	return tasks, nil
 }
 
+// ListByStatus 按状态查询任务，按优先级和创建时间排序。
 func (r *TaskRepo) ListByStatus(status domain.TaskStatus) ([]*domain.Task, error) {
 	rows, err := r.db.Query(
 		`SELECT id, run_id, task_spec_id, task_type, attempt_no, status, priority, queue_status, resource_class, preemptible, restart_policy, title, description, input_data, output_data, workspace_path, parent_task_id, started_at, completed_at, created_at, updated_at
-		 FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC`, status,
+			 FROM tasks WHERE status = ? ORDER BY priority ASC, created_at ASC`, status,
 	)
 	if err != nil {
 		return nil, err
@@ -206,6 +234,7 @@ func (r *TaskRepo) ListByStatus(status domain.TaskStatus) ([]*domain.Task, error
 	return tasks, nil
 }
 
+// UpdateStatus 更新任务状态。
 func (r *TaskRepo) UpdateStatus(id string, status domain.TaskStatus) error {
 	_, err := r.db.Exec(
 		"UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?", status, time.Now(), id,
@@ -213,6 +242,7 @@ func (r *TaskRepo) UpdateStatus(id string, status domain.TaskStatus) error {
 	return err
 }
 
+// UpdateQueueStatus 更新任务的队列状态。
 func (r *TaskRepo) UpdateQueueStatus(id string, queueStatus string) error {
 	_, err := r.db.Exec(
 		"UPDATE tasks SET queue_status = ?, updated_at = ? WHERE id = ?", queueStatus, time.Now(), id,
@@ -220,6 +250,7 @@ func (r *TaskRepo) UpdateQueueStatus(id string, queueStatus string) error {
 	return err
 }
 
+// MaxAttemptNo 查询指定运行和任务类型的最大尝试次数。
 func (r *TaskRepo) MaxAttemptNo(runID string, taskType string) (int, error) {
 	var maxAttempt sql.NullInt64
 	err := r.db.QueryRow(
@@ -234,23 +265,29 @@ func (r *TaskRepo) MaxAttemptNo(runID string, taskType string) (int, error) {
 	return int(maxAttempt.Int64), nil
 }
 
+// ==================== AgentInstanceRepo ====================
+
+// AgentInstanceRepo 提供 Agent 实例的数据访问操作。
 type AgentInstanceRepo struct {
 	db *DB
 }
 
+// NewAgentInstanceRepo 创建 Agent 实例仓库。
 func NewAgentInstanceRepo(db *DB) *AgentInstanceRepo {
 	return &AgentInstanceRepo{db: db}
 }
 
+// Create 插入一个新 Agent 实例记录。
 func (r *AgentInstanceRepo) Create(a *domain.AgentInstance) error {
 	_, err := r.db.Exec(
 		`INSERT INTO agent_instances (id, run_id, task_id, agent_spec_id, agent_kind, status, pid, tmux_session, workspace_path, last_heartbeat_at, last_output_at, checkpoint_id, metadata, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		a.ID, a.RunID, a.TaskID, a.AgentSpecID, a.AgentKind, a.Status, a.PID, a.TmuxSession, a.WorkspacePath, a.LastHeartbeatAt, a.LastOutputAt, a.CheckpointID, a.Metadata, a.CreatedAt, a.UpdatedAt,
 	)
 	return err
 }
 
+// scanAgentInstance 是 Agent 实例扫描的通用辅助函数。
 func scanAgentInstance(row scanner) (*domain.AgentInstance, error) {
 	a := &domain.AgentInstance{}
 	err := row.Scan(&a.ID, &a.RunID, &a.TaskID, &a.AgentSpecID, &a.AgentKind, &a.Status, &a.PID, &a.TmuxSession, &a.WorkspacePath, &a.LastHeartbeatAt, &a.LastOutputAt, &a.CheckpointID, &a.Metadata, &a.CreatedAt, &a.UpdatedAt)
@@ -260,14 +297,16 @@ func scanAgentInstance(row scanner) (*domain.AgentInstance, error) {
 	return a, err
 }
 
+// GetByID 根据 ID 查询 Agent 实例。
 func (r *AgentInstanceRepo) GetByID(id string) (*domain.AgentInstance, error) {
 	row := r.db.QueryRow(
 		`SELECT id, run_id, task_id, agent_spec_id, agent_kind, status, pid, tmux_session, workspace_path, last_heartbeat_at, last_output_at, checkpoint_id, metadata, created_at, updated_at
-		 FROM agent_instances WHERE id = ?`, id,
+			 FROM agent_instances WHERE id = ?`, id,
 	)
 	return scanAgentInstance(row)
 }
 
+// UpdateStatus 更新 Agent 实例状态。
 func (r *AgentInstanceRepo) UpdateStatus(id string, status domain.AgentInstanceStatus) error {
 	_, err := r.db.Exec(
 		"UPDATE agent_instances SET status = ?, updated_at = ? WHERE id = ?", status, time.Now(), id,
@@ -275,6 +314,7 @@ func (r *AgentInstanceRepo) UpdateStatus(id string, status domain.AgentInstanceS
 	return err
 }
 
+// UpdateHeartbeat 更新 Agent 的心跳时间。
 func (r *AgentInstanceRepo) UpdateHeartbeat(id string) error {
 	_, err := r.db.Exec(
 		"UPDATE agent_instances SET last_heartbeat_at = ?, updated_at = ? WHERE id = ?", time.Now(), time.Now(), id,
@@ -282,6 +322,7 @@ func (r *AgentInstanceRepo) UpdateHeartbeat(id string) error {
 	return err
 }
 
+// UpdatePID 更新 Agent 的进程 ID。
 func (r *AgentInstanceRepo) UpdatePID(id string, pid int) error {
 	_, err := r.db.Exec(
 		"UPDATE agent_instances SET pid = ?, updated_at = ? WHERE id = ?", pid, time.Now(), id,
@@ -289,6 +330,7 @@ func (r *AgentInstanceRepo) UpdatePID(id string, pid int) error {
 	return err
 }
 
+// UpdateCheckpointID 更新 Agent 的最新检查点引用。
 func (r *AgentInstanceRepo) UpdateCheckpointID(id string, checkpointID string) error {
 	_, err := r.db.Exec(
 		"UPDATE agent_instances SET checkpoint_id = ?, updated_at = ? WHERE id = ?", checkpointID, time.Now(), id,
@@ -296,10 +338,11 @@ func (r *AgentInstanceRepo) UpdateCheckpointID(id string, checkpointID string) e
 	return err
 }
 
+// ListByRun 查询指定运行下的所有 Agent 实例。
 func (r *AgentInstanceRepo) ListByRun(runID string) ([]*domain.AgentInstance, error) {
 	rows, err := r.db.Query(
 		`SELECT id, run_id, task_id, agent_spec_id, agent_kind, status, pid, tmux_session, workspace_path, last_heartbeat_at, last_output_at, checkpoint_id, metadata, created_at, updated_at
-		 FROM agent_instances WHERE run_id = ? ORDER BY created_at ASC`, runID,
+			 FROM agent_instances WHERE run_id = ? ORDER BY created_at ASC`, runID,
 	)
 	if err != nil {
 		return nil, err
@@ -317,10 +360,11 @@ func (r *AgentInstanceRepo) ListByRun(runID string) ([]*domain.AgentInstance, er
 	return agents, nil
 }
 
+// ListByStatus 按状态查询 Agent 实例。
 func (r *AgentInstanceRepo) ListByStatus(status domain.AgentInstanceStatus) ([]*domain.AgentInstance, error) {
 	rows, err := r.db.Query(
 		`SELECT id, run_id, task_id, agent_spec_id, agent_kind, status, pid, tmux_session, workspace_path, last_heartbeat_at, last_output_at, checkpoint_id, metadata, created_at, updated_at
-		 FROM agent_instances WHERE status = ?`, status,
+			 FROM agent_instances WHERE status = ?`, status,
 	)
 	if err != nil {
 		return nil, err
@@ -338,10 +382,11 @@ func (r *AgentInstanceRepo) ListByStatus(status domain.AgentInstanceStatus) ([]*
 	return agents, nil
 }
 
+// ListAll 查询所有 Agent 实例。
 func (r *AgentInstanceRepo) ListAll() ([]*domain.AgentInstance, error) {
 	rows, err := r.db.Query(
 		`SELECT id, run_id, task_id, agent_spec_id, agent_kind, status, pid, tmux_session, workspace_path, last_heartbeat_at, last_output_at, checkpoint_id, metadata, created_at, updated_at
-		 FROM agent_instances ORDER BY created_at DESC`,
+			 FROM agent_instances ORDER BY created_at DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -359,14 +404,19 @@ func (r *AgentInstanceRepo) ListAll() ([]*domain.AgentInstance, error) {
 	return agents, nil
 }
 
+// ==================== EventRepo ====================
+
+// EventRepo 提供事件的数据访问操作。
 type EventRepo struct {
 	db *DB
 }
 
+// NewEventRepo 创建事件仓库实例。
 func NewEventRepo(db *DB) *EventRepo {
 	return &EventRepo{db: db}
 }
 
+// Create 插入一个新事件记录。
 func (r *EventRepo) Create(e *domain.Event) error {
 	_, err := r.db.Exec(
 		"INSERT INTO events (id, run_id, task_id, agent_id, event_type, message, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -375,6 +425,7 @@ func (r *EventRepo) Create(e *domain.Event) error {
 	return err
 }
 
+// ListByRun 查询指定运行的所有事件，按创建时间升序排列。
 func (r *EventRepo) ListByRun(runID string) ([]*domain.Event, error) {
 	rows, err := r.db.Query(
 		"SELECT id, run_id, task_id, agent_id, event_type, message, metadata, created_at FROM events WHERE run_id = ? ORDER BY created_at ASC", runID,
@@ -395,19 +446,25 @@ func (r *EventRepo) ListByRun(runID string) ([]*domain.Event, error) {
 	return events, nil
 }
 
+// DeleteOlderThan 删除指定时间之前的所有事件。
 func (r *EventRepo) DeleteOlderThan(cutoff time.Time) error {
 	_, err := r.db.Exec("DELETE FROM events WHERE created_at < ?", cutoff)
 	return err
 }
 
+// ==================== CheckpointRepo ====================
+
+// CheckpointRepo 提供检查点的数据访问操作。
 type CheckpointRepo struct {
 	db *DB
 }
 
+// NewCheckpointRepo 创建检查点仓库实例。
 func NewCheckpointRepo(db *DB) *CheckpointRepo {
 	return &CheckpointRepo{db: db}
 }
 
+// Create 插入一个新检查点记录。
 func (r *CheckpointRepo) Create(c *domain.Checkpoint) error {
 	_, err := r.db.Exec(
 		"INSERT INTO checkpoints (id, agent_id, task_id, run_id, phase, state_data, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -416,6 +473,7 @@ func (r *CheckpointRepo) Create(c *domain.Checkpoint) error {
 	return err
 }
 
+// LatestByTask 获取指定任务的最新检查点。
 func (r *CheckpointRepo) LatestByTask(taskID string) (*domain.Checkpoint, error) {
 	c := &domain.Checkpoint{}
 	err := r.db.QueryRow(
@@ -427,6 +485,7 @@ func (r *CheckpointRepo) LatestByTask(taskID string) (*domain.Checkpoint, error)
 	return c, err
 }
 
+// ListByTask 查询指定任务的所有检查点，按创建时间降序排列。
 func (r *CheckpointRepo) ListByTask(taskID string) ([]*domain.Checkpoint, error) {
 	rows, err := r.db.Query(
 		"SELECT id, agent_id, task_id, run_id, phase, state_data, reason, created_at FROM checkpoints WHERE task_id = ? ORDER BY created_at DESC", taskID,
@@ -447,14 +506,19 @@ func (r *CheckpointRepo) ListByTask(taskID string) ([]*domain.Checkpoint, error)
 	return checkpoints, nil
 }
 
+// ==================== ResourceSnapshotRepo ====================
+
+// ResourceSnapshotRepo 提供资源快照的数据访问操作。
 type ResourceSnapshotRepo struct {
 	db *DB
 }
 
+// NewResourceSnapshotRepo 创建资源快照仓库实例。
 func NewResourceSnapshotRepo(db *DB) *ResourceSnapshotRepo {
 	return &ResourceSnapshotRepo{db: db}
 }
 
+// Create 插入一个新资源快照记录。
 func (r *ResourceSnapshotRepo) Create(s *domain.ResourceSnapshot) error {
 	_, err := r.db.Exec(
 		"INSERT INTO resource_snapshots (id, memory_percent, cpu_percent, disk_percent, active_agents, pressure_level, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -463,6 +527,7 @@ func (r *ResourceSnapshotRepo) Create(s *domain.ResourceSnapshot) error {
 	return err
 }
 
+// Latest 获取最新的资源快照。
 func (r *ResourceSnapshotRepo) Latest() (*domain.ResourceSnapshot, error) {
 	s := &domain.ResourceSnapshot{}
 	err := r.db.QueryRow(
@@ -474,19 +539,25 @@ func (r *ResourceSnapshotRepo) Latest() (*domain.ResourceSnapshot, error) {
 	return s, err
 }
 
+// DeleteOlderThan 删除指定时间之前的所有资源快照。
 func (r *ResourceSnapshotRepo) DeleteOlderThan(cutoff time.Time) error {
 	_, err := r.db.Exec("DELETE FROM resource_snapshots WHERE created_at < ?", cutoff)
 	return err
 }
 
+// ==================== WorkspaceRepo ====================
+
+// WorkspaceRepo 提供工作区的数据访问操作。
 type WorkspaceRepo struct {
 	db *DB
 }
 
+// NewWorkspaceRepo 创建工作区仓库实例。
 func NewWorkspaceRepo(db *DB) *WorkspaceRepo {
 	return &WorkspaceRepo{db: db}
 }
 
+// Create 插入一个新工作区记录。
 func (r *WorkspaceRepo) Create(w *domain.Workspace) error {
 	_, err := r.db.Exec(
 		"INSERT INTO workspaces (id, task_id, project_id, path, branch, commit_sha, size_bytes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -495,6 +566,7 @@ func (r *WorkspaceRepo) Create(w *domain.Workspace) error {
 	return err
 }
 
+// GetByTaskID 根据任务 ID 查询工作区。
 func (r *WorkspaceRepo) GetByTaskID(taskID string) (*domain.Workspace, error) {
 	w := &domain.Workspace{}
 	err := r.db.QueryRow(
@@ -506,6 +578,7 @@ func (r *WorkspaceRepo) GetByTaskID(taskID string) (*domain.Workspace, error) {
 	return w, err
 }
 
+// ListActive 查询所有工作区。
 func (r *WorkspaceRepo) ListActive() ([]*domain.Workspace, error) {
 	rows, err := r.db.Query(
 		"SELECT id, task_id, project_id, path, branch, commit_sha, size_bytes, created_at, updated_at FROM workspaces",
@@ -526,14 +599,19 @@ func (r *WorkspaceRepo) ListActive() ([]*domain.Workspace, error) {
 	return workspaces, nil
 }
 
+// ==================== TerminalSessionRepo ====================
+
+// TerminalSessionRepo 提供终端会话的数据访问操作。
 type TerminalSessionRepo struct {
 	db *DB
 }
 
+// NewTerminalSessionRepo 创建终端会话仓库实例。
 func NewTerminalSessionRepo(db *DB) *TerminalSessionRepo {
 	return &TerminalSessionRepo{db: db}
 }
 
+// Create 插入一个新终端会话记录。
 func (r *TerminalSessionRepo) Create(t *domain.TerminalSession) error {
 	_, err := r.db.Exec(
 		"INSERT INTO terminal_sessions (id, task_id, agent_id, tmux_session, tmux_pane, status, log_file_path, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -542,6 +620,7 @@ func (r *TerminalSessionRepo) Create(t *domain.TerminalSession) error {
 	return err
 }
 
+// GetByID 根据 ID 查询终端会话。
 func (r *TerminalSessionRepo) GetByID(id string) (*domain.TerminalSession, error) {
 	t := &domain.TerminalSession{}
 	err := r.db.QueryRow(
@@ -553,6 +632,7 @@ func (r *TerminalSessionRepo) GetByID(id string) (*domain.TerminalSession, error
 	return t, err
 }
 
+// UpdateStatus 更新终端会话状态。
 func (r *TerminalSessionRepo) UpdateStatus(id string, status domain.TerminalSessionStatus) error {
 	_, err := r.db.Exec(
 		"UPDATE terminal_sessions SET status = ?, updated_at = ? WHERE id = ?", status, time.Now(), id,
@@ -560,6 +640,7 @@ func (r *TerminalSessionRepo) UpdateStatus(id string, status domain.TerminalSess
 	return err
 }
 
+// ListAll 查询所有终端会话。
 func (r *TerminalSessionRepo) ListAll() ([]*domain.TerminalSession, error) {
 	rows, err := r.db.Query(
 		"SELECT id, task_id, agent_id, tmux_session, tmux_pane, status, log_file_path, created_at, updated_at FROM terminal_sessions ORDER BY created_at DESC",
@@ -580,14 +661,19 @@ func (r *TerminalSessionRepo) ListAll() ([]*domain.TerminalSession, error) {
 	return terminals, nil
 }
 
+// ==================== CommandLogRepo ====================
+
+// CommandLogRepo 提供命令日志的数据访问操作。
 type CommandLogRepo struct {
 	db *DB
 }
 
+// NewCommandLogRepo 创建命令日志仓库实例。
 func NewCommandLogRepo(db *DB) *CommandLogRepo {
 	return &CommandLogRepo{db: db}
 }
 
+// Create 插入一条命令日志记录。
 func (r *CommandLogRepo) Create(c *domain.CommandLog) error {
 	_, err := r.db.Exec(
 		"INSERT INTO command_logs (id, task_id, agent_id, command, exit_code, output, duration_ms, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -596,14 +682,19 @@ func (r *CommandLogRepo) Create(c *domain.CommandLog) error {
 	return err
 }
 
+// ==================== TaskSpecRepo ====================
+
+// TaskSpecRepo 提供任务规格的数据访问操作。
 type TaskSpecRepo struct {
 	db *DB
 }
 
+// NewTaskSpecRepo 创建任务规格仓库实例。
 func NewTaskSpecRepo(db *DB) *TaskSpecRepo {
 	return &TaskSpecRepo{db: db}
 }
 
+// Create 插入一个新任务规格记录。
 func (r *TaskSpecRepo) Create(ts *domain.TaskSpec) error {
 	_, err := r.db.Exec(
 		"INSERT INTO task_specs (id, name, task_type, runtime_type, command_template, timeout_seconds, retry_policy, resource_class, can_pause, can_checkpoint, required_inputs, expected_outputs) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -612,6 +703,7 @@ func (r *TaskSpecRepo) Create(ts *domain.TaskSpec) error {
 	return err
 }
 
+// GetByID 根据 ID 查询任务规格。
 func (r *TaskSpecRepo) GetByID(id string) (*domain.TaskSpec, error) {
 	ts := &domain.TaskSpec{}
 	err := r.db.QueryRow(
@@ -623,6 +715,7 @@ func (r *TaskSpecRepo) GetByID(id string) (*domain.TaskSpec, error) {
 	return ts, err
 }
 
+// List 查询所有任务规格。
 func (r *TaskSpecRepo) List() ([]*domain.TaskSpec, error) {
 	rows, err := r.db.Query("SELECT id, name, task_type, runtime_type, command_template, timeout_seconds, retry_policy, resource_class, can_pause, can_checkpoint, required_inputs, expected_outputs FROM task_specs")
 	if err != nil {
@@ -641,14 +734,19 @@ func (r *TaskSpecRepo) List() ([]*domain.TaskSpec, error) {
 	return specs, nil
 }
 
+// ==================== AgentSpecRepo ====================
+
+// AgentSpecRepo 提供 Agent 规格的数据访问操作。
 type AgentSpecRepo struct {
 	db *DB
 }
 
+// NewAgentSpecRepo 创建 Agent 规格仓库实例。
 func NewAgentSpecRepo(db *DB) *AgentSpecRepo {
 	return &AgentSpecRepo{db: db}
 }
 
+// Create 插入一个新 Agent 规格记录。
 func (r *AgentSpecRepo) Create(as *domain.AgentSpec) error {
 	_, err := r.db.Exec(
 		"INSERT INTO agent_specs (id, name, agent_kind, supported_task_types, default_command, max_concurrency, resource_weight, heartbeat_mode, output_parser) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -657,6 +755,7 @@ func (r *AgentSpecRepo) Create(as *domain.AgentSpec) error {
 	return err
 }
 
+// GetByID 根据 ID 查询 Agent 规格。
 func (r *AgentSpecRepo) GetByID(id string) (*domain.AgentSpec, error) {
 	as := &domain.AgentSpec{}
 	err := r.db.QueryRow(
@@ -668,6 +767,7 @@ func (r *AgentSpecRepo) GetByID(id string) (*domain.AgentSpec, error) {
 	return as, err
 }
 
+// List 查询所有 Agent 规格。
 func (r *AgentSpecRepo) List() ([]*domain.AgentSpec, error) {
 	rows, err := r.db.Query("SELECT id, name, agent_kind, supported_task_types, default_command, max_concurrency, resource_weight, heartbeat_mode, output_parser FROM agent_specs")
 	if err != nil {
@@ -686,14 +786,19 @@ func (r *AgentSpecRepo) List() ([]*domain.AgentSpec, error) {
 	return specs, nil
 }
 
+// ==================== WorkflowTemplateRepo ====================
+
+// WorkflowTemplateRepo 提供工作流模板的数据访问操作。
 type WorkflowTemplateRepo struct {
 	db *DB
 }
 
+// NewWorkflowTemplateRepo 创建工作流模板仓库实例。
 func NewWorkflowTemplateRepo(db *DB) *WorkflowTemplateRepo {
 	return &WorkflowTemplateRepo{db: db}
 }
 
+// Create 插入一个新工作流模板记录。
 func (r *WorkflowTemplateRepo) Create(wt *domain.WorkflowTemplate) error {
 	_, err := r.db.Exec(
 		"INSERT INTO workflow_templates (id, name, description, nodes_json, edges_json, on_failure) VALUES (?, ?, ?, ?, ?, ?)",
@@ -702,6 +807,7 @@ func (r *WorkflowTemplateRepo) Create(wt *domain.WorkflowTemplate) error {
 	return err
 }
 
+// GetByID 根据 ID 查询工作流模板。
 func (r *WorkflowTemplateRepo) GetByID(id string) (*domain.WorkflowTemplate, error) {
 	wt := &domain.WorkflowTemplate{}
 	err := r.db.QueryRow(
@@ -713,6 +819,7 @@ func (r *WorkflowTemplateRepo) GetByID(id string) (*domain.WorkflowTemplate, err
 	return wt, err
 }
 
+// List 查询所有工作流模板。
 func (r *WorkflowTemplateRepo) List() ([]*domain.WorkflowTemplate, error) {
 	rows, err := r.db.Query("SELECT id, name, description, nodes_json, edges_json, on_failure FROM workflow_templates")
 	if err != nil {
@@ -731,6 +838,9 @@ func (r *WorkflowTemplateRepo) List() ([]*domain.WorkflowTemplate, error) {
 	return templates, nil
 }
 
+// ==================== Repos 聚合 ====================
+
+// Repos 是所有数据仓库的聚合容器，提供统一的访问入口。
 type Repos struct {
 	Projects          *ProjectRepo
 	Runs              *RunRepo
@@ -747,6 +857,7 @@ type Repos struct {
 	WorkflowTemplates *WorkflowTemplateRepo
 }
 
+// NewRepos 创建并初始化所有数据仓库。
 func NewRepos(db *DB) *Repos {
 	return &Repos{
 		Projects:          NewProjectRepo(db),
@@ -765,18 +876,21 @@ func NewRepos(db *DB) *Repos {
 	}
 }
 
+// ActiveAgentsResult 包含 Agent 实例及其关联任务的联合查询结果。
 type ActiveAgentsResult struct {
 	Agent *domain.AgentInstance
 	Task  *domain.Task
 }
 
+// ListActiveWithTasks 联合查询所有活跃 Agent 及其关联任务。
+// 活跃状态包括 starting、running 和 paused。
 func (r *AgentInstanceRepo) ListActiveWithTasks() ([]ActiveAgentsResult, error) {
 	query := `SELECT a.id, a.run_id, a.task_id, a.agent_spec_id, a.agent_kind, a.status, a.pid, a.tmux_session, a.workspace_path, a.last_heartbeat_at, a.last_output_at, a.checkpoint_id, a.metadata, a.created_at, a.updated_at,
-		        t.id, t.run_id, t.task_spec_id, t.task_type, t.attempt_no, t.status, t.priority, t.queue_status, t.resource_class, t.preemptible, t.restart_policy, t.title, t.description, t.input_data, t.output_data, t.workspace_path, t.parent_task_id, t.started_at, t.completed_at, t.created_at, t.updated_at
-		 FROM agent_instances a
-		 JOIN tasks t ON a.task_id = t.id
-		 WHERE a.status IN (?, ?, ?)
-		 ORDER BY t.priority ASC, a.created_at ASC`
+			        t.id, t.run_id, t.task_spec_id, t.task_type, t.attempt_no, t.status, t.priority, t.queue_status, t.resource_class, t.preemptible, t.restart_policy, t.title, t.description, t.input_data, t.output_data, t.workspace_path, t.parent_task_id, t.started_at, t.completed_at, t.created_at, t.updated_at
+			 FROM agent_instances a
+			 JOIN tasks t ON a.task_id = t.id
+			 WHERE a.status IN (?, ?, ?)
+			 ORDER BY t.priority ASC, a.created_at ASC`
 	rows, err := r.db.Query(query, domain.AgentStatusStarting, domain.AgentStatusRunning, domain.AgentStatusPaused)
 	if err != nil {
 		return nil, err

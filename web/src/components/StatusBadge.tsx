@@ -1,5 +1,8 @@
+// StatusBadge.tsx - 状态徽章组件
+// 根据状态值显示不同颜色的状态标签。
 import { statusColors } from "@/lib/api";
 
+// StatusBadge 根据状态字符串渲染对应的彩色徽章
 export function StatusBadge({ status }: { status: string }) {
   const colorClass = statusColors[status] || "bg-gray-100 text-gray-800";
   return (

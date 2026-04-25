@@ -1,3 +1,5 @@
+// Package scheduler 实现核心调度器，负责定时执行任务调度、资源监控、
+// 负载保护（驱逐/暂停 Agent）、定期检查点、日志清理和工作区大小检查。
 package scheduler
 
 import (
@@ -19,24 +21,27 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/terminal"
 )
 
+// PressureLevel 表示系统资源压力等级。
 type PressureLevel string
 
 const (
-	PressureNormal   PressureLevel = "normal"
-	PressureWarn     PressureLevel = "warn"
-	PressureHigh     PressureLevel = "high"
-	PressureCritical PressureLevel = "critical"
+	PressureNormal   PressureLevel = "normal"   // 正常，无限制
+	PressureWarn     PressureLevel = "warn"     // 警告，仅调度轻量任务
+	PressureHigh     PressureLevel = "high"     // 高压，暂停低优先级 Agent
+	PressureCritical PressureLevel = "critical" // 临界，驱逐所有可抢占 Agent
 )
 
+// Scheduler 是核心调度器，定时执行任务调度和资源管理。
 type Scheduler struct {
 	cfg       *config.Config
 	repos     *storage.Repos
 	runtime   agentruntime.AgentRuntime
 	terminal  *terminal.Manager
 	stop      chan struct{}
-	tickCount int64
+	tickCount int64 // 调度周期计数器
 }
 
+// NewScheduler 创建调度器实例。
 func NewScheduler(cfg *config.Config, repos *storage.Repos, rt agentruntime.AgentRuntime, tm *terminal.Manager) *Scheduler {
 	return &Scheduler{
 		cfg:      cfg,
@@ -47,6 +52,7 @@ func NewScheduler(cfg *config.Config, repos *storage.Repos, rt agentruntime.Agen
 	}
 }
 
+// Run 启动调度器的主循环，包含调度定时器和检查点定时器。
 func (s *Scheduler) Run(ctx context.Context) {
 	ticker := time.NewTicker(s.cfg.Scheduler.TickDuration())
 	defer ticker.Stop()
@@ -72,17 +78,22 @@ func (s *Scheduler) Run(ctx context.Context) {
 	}
 }
 
+// Stop 停止调度器。
 func (s *Scheduler) Stop() {
 	close(s.stop)
 }
 
+// tick 执行一次调度周期，包含资源监控、负载保护、任务调度和定期清理。
 func (s *Scheduler) tick(ctx context.Context) {
+	// 收集系统资源指标
 	memPercent, cpuPercent, diskPercent := s.collectMetrics()
 	activeAgents, _ := s.repos.AgentInstances.ListActiveWithTasks()
 	activeCount := len(activeAgents)
 
+	// 计算资源压力等级
 	level := s.determinePressure(memPercent, diskPercent)
 
+	// 保存资源快照
 	snapshot := &domain.ResourceSnapshot{
 		ID:            uuid.New().String(),
 		MemoryPercent: memPercent,
@@ -100,8 +111,10 @@ func (s *Scheduler) tick(ctx context.Context) {
 		slog.Warn("resource pressure detected", "level", level, "memory", memPercent, "disk", diskPercent, "active_agents", activeCount)
 	}
 
+	// 执行负载保护（暂停或驱逐 Agent）
 	s.handleLoadShedding(ctx, level, activeAgents)
 
+	// 根据压力等级调度任务
 	if level == PressureNormal {
 		s.scheduleTasks(ctx, activeCount)
 	} else if level == PressureWarn {
@@ -109,9 +122,11 @@ func (s *Scheduler) tick(ctx context.Context) {
 	}
 
 	s.tickCount++
+	// 每 10 个周期持久化一次终端输出
 	if s.tickCount%10 == 0 {
 		s.persistTerminalOutputs(ctx, activeAgents)
 	}
+	// 每 100 个周期执行一次清理
 	if s.tickCount%100 == 0 {
 		s.cleanup(ctx)
 	}
@@ -119,6 +134,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 	slog.Debug("scheduler tick", "memory", memPercent, "cpu", cpuPercent, "disk", diskPercent, "agents", activeCount, "pressure", level)
 }
 
+// handleLoadShedding 根据压力等级执行负载保护策略。
 func (s *Scheduler) handleLoadShedding(ctx context.Context, level PressureLevel, activeAgents []storage.ActiveAgentsResult) {
 	switch level {
 	case PressureHigh:
@@ -128,6 +144,7 @@ func (s *Scheduler) handleLoadShedding(ctx context.Context, level PressureLevel,
 	}
 }
 
+// pauseLowPriorityAgents 在高压时暂停低优先级且可抢占的 Agent。
 func (s *Scheduler) pauseLowPriorityAgents(ctx context.Context, activeAgents []storage.ActiveAgentsResult) {
 	for _, entry := range activeAgents {
 		if entry.Agent.Status != domain.AgentStatusRunning {
@@ -159,6 +176,7 @@ func (s *Scheduler) pauseLowPriorityAgents(ctx context.Context, activeAgents []s
 	}
 }
 
+// evictAgents 在临界压力时先创建检查点再驱逐所有可抢占的 Agent。
 func (s *Scheduler) evictAgents(ctx context.Context, activeAgents []storage.ActiveAgentsResult) {
 	for _, entry := range activeAgents {
 		if entry.Agent.Status != domain.AgentStatusRunning && entry.Agent.Status != domain.AgentStatusPaused {
@@ -168,6 +186,7 @@ func (s *Scheduler) evictAgents(ctx context.Context, activeAgents []storage.Acti
 			continue
 		}
 
+		// 驱逐前尝试创建检查点
 		cp, err := s.runtime.Checkpoint(ctx, entry.Agent.ID)
 		if err != nil {
 			slog.Warn("checkpoint before eviction failed", "agent_id", entry.Agent.ID, "error", err)
@@ -185,6 +204,7 @@ func (s *Scheduler) evictAgents(ctx context.Context, activeAgents []storage.Acti
 			})
 		}
 
+		// 停止 Agent 并更新状态
 		if err := s.runtime.Stop(ctx, entry.Agent.TmuxSession); err != nil {
 			slog.Error("stop agent during eviction", "agent_id", entry.Agent.ID, "error", err)
 		}
@@ -204,6 +224,7 @@ func (s *Scheduler) evictAgents(ctx context.Context, activeAgents []storage.Acti
 	}
 }
 
+// scheduleTasksLightOnly 在警告压力下仅调度轻量级任务。
 func (s *Scheduler) scheduleTasksLightOnly(ctx context.Context, activeAgentCount int) {
 	queuedTasks, err := s.repos.Tasks.ListByStatus(domain.TaskStatusQueued)
 	if err != nil || len(queuedTasks) == 0 {
@@ -211,6 +232,7 @@ func (s *Scheduler) scheduleTasksLightOnly(ctx context.Context, activeAgentCount
 	}
 
 	for _, task := range queuedTasks {
+		// 跳过重型任务
 		if task.ResourceClass == domain.ResourceClassHeavy {
 			slog.Info("skipping heavy task under WARN pressure", "task_id", task.ID)
 			continue
@@ -226,6 +248,7 @@ func (s *Scheduler) scheduleTasksLightOnly(ctx context.Context, activeAgentCount
 	}
 }
 
+// runCheckpoints 为所有运行中的 Agent 创建定期检查点。
 func (s *Scheduler) runCheckpoints(ctx context.Context) {
 	agents, err := s.repos.AgentInstances.ListByStatus(domain.AgentStatusRunning)
 	if err != nil || len(agents) == 0 {
@@ -260,27 +283,32 @@ func (s *Scheduler) runCheckpoints(ctx context.Context) {
 			continue
 		}
 
+		// 更新 Agent 的最新检查点引用
 		s.repos.AgentInstances.UpdateCheckpointID(agent.ID, checkpoint.ID)
 		slog.Debug("periodic checkpoint saved", "agent_id", agent.ID, "checkpoint_id", checkpoint.ID)
 	}
 }
 
+// recoverFromCheckpoint 从检查点恢复任务，创建新的 Agent 实例并重新启动执行。
 func (s *Scheduler) recoverFromCheckpoint(ctx context.Context, taskID string) error {
 	task, err := s.repos.Tasks.GetByID(taskID)
 	if err != nil || task == nil {
 		return fmt.Errorf("task not found: %s", taskID)
 	}
 
+	// 获取任务的检查点列表
 	checkpoints, err := s.repos.Checkpoints.ListByTask(taskID)
 	if err != nil || len(checkpoints) == 0 {
 		return fmt.Errorf("no checkpoints found for task %s", taskID)
 	}
 
+	// 使用最新的检查点
 	latest := checkpoints[0]
 
 	agentID := uuid.New().String()
 	tmuxSession := fmt.Sprintf("agent-%s", agentID[:8])
 
+	// 创建恢复用的 Agent 实例
 	agent := &domain.AgentInstance{
 		ID:            agentID,
 		RunID:         task.RunID,
@@ -297,11 +325,13 @@ func (s *Scheduler) recoverFromCheckpoint(ctx context.Context, taskID string) er
 		return fmt.Errorf("create recovery agent: %w", err)
 	}
 
+	// 创建 tmux 会话
 	if err := s.terminal.CreateSession(ctx, tmuxSession); err != nil {
 		s.repos.AgentInstances.UpdateStatus(agentID, domain.AgentStatusFailed)
 		return fmt.Errorf("create tmux session for recovery: %w", err)
 	}
 
+	// 启动 Agent 执行
 	startReq := agentruntime.StartRequest{
 		AgentID:     agentID,
 		TaskID:      task.ID,
@@ -325,6 +355,7 @@ func (s *Scheduler) recoverFromCheckpoint(ctx context.Context, taskID string) er
 	s.repos.AgentInstances.UpdateStatus(agentID, domain.AgentStatusRunning)
 	s.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusRunning)
 
+	// 记录恢复事件
 	now := time.Now()
 	s.repos.Events.Create(&domain.Event{
 		ID:        uuid.New().String(),
@@ -341,6 +372,7 @@ func (s *Scheduler) recoverFromCheckpoint(ctx context.Context, taskID string) er
 	return nil
 }
 
+// scheduleTasks 在正常压力下调度所有类型的排队任务。
 func (s *Scheduler) scheduleTasks(ctx context.Context, activeAgentCount int) {
 	queuedTasks, err := s.repos.Tasks.ListByStatus(domain.TaskStatusQueued)
 	if err != nil || len(queuedTasks) == 0 {
@@ -360,7 +392,9 @@ func (s *Scheduler) scheduleTasks(ctx context.Context, activeAgentCount int) {
 	}
 }
 
+// launchAgent 为任务创建并启动一个新的 Agent 实例。
 func (s *Scheduler) launchAgent(ctx context.Context, task *domain.Task) error {
+	// 更新任务状态为已接纳
 	if err := s.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusAdmitted); err != nil {
 		return fmt.Errorf("update task status to admitted: %w", err)
 	}
@@ -371,6 +405,7 @@ func (s *Scheduler) launchAgent(ctx context.Context, task *domain.Task) error {
 	agentID := uuid.New().String()
 	tmuxSession := fmt.Sprintf("agent-%s", agentID[:8])
 
+	// 创建 Agent 实例记录
 	agent := &domain.AgentInstance{
 		ID:            agentID,
 		RunID:         task.RunID,
@@ -386,12 +421,14 @@ func (s *Scheduler) launchAgent(ctx context.Context, task *domain.Task) error {
 		return fmt.Errorf("create agent instance: %w", err)
 	}
 
+	// 创建 tmux 会话
 	if err := s.terminal.CreateSession(ctx, tmuxSession); err != nil {
 		s.repos.AgentInstances.UpdateStatus(agentID, domain.AgentStatusFailed)
 		s.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusFailed)
 		return fmt.Errorf("create tmux session: %w", err)
 	}
 
+	// 解析并执行命令
 	startReq := agentruntime.StartRequest{
 		AgentID:     agentID,
 		TaskID:      task.ID,
@@ -413,11 +450,13 @@ func (s *Scheduler) launchAgent(ctx context.Context, task *domain.Task) error {
 		s.repos.AgentInstances.UpdatePID(agentID, result.PID)
 	}
 
+	// 更新任务状态为运行中
 	now := time.Now()
 	if err := s.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusRunning); err != nil {
 		slog.Error("update task to running", "task_id", task.ID, "error", err)
 	}
 
+	// 创建关联的终端会话记录
 	terminalSession := &domain.TerminalSession{
 		ID:          uuid.New().String(),
 		TaskID:      task.ID,
@@ -435,6 +474,7 @@ func (s *Scheduler) launchAgent(ctx context.Context, task *domain.Task) error {
 
 	s.repos.AgentInstances.UpdateStatus(agentID, domain.AgentStatusRunning)
 
+	// 记录 Agent 启动事件
 	s.repos.Events.Create(&domain.Event{
 		ID:        uuid.New().String(),
 		RunID:     task.RunID,
@@ -449,27 +489,34 @@ func (s *Scheduler) launchAgent(ctx context.Context, task *domain.Task) error {
 	return nil
 }
 
+// resolveCommand 解析任务要执行的命令，优先使用 TaskSpec 中的命令模板。
 func (s *Scheduler) resolveCommand(task *domain.Task) string {
+	// 尝试从 TaskSpec 获取命令模板
 	if task.TaskSpecID != "" {
 		spec, err := s.repos.TaskSpecs.GetByID(task.TaskSpecID)
 		if err == nil && spec != nil && spec.CommandTemplate != "" {
 			return spec.CommandTemplate
 		}
 	}
+	// 回退到任务输入数据
 	if task.InputData != "" {
 		return task.InputData
 	}
 	return "echo 'task " + task.ID[:8] + " started'"
 }
 
+// cleanup 执行定期清理，包括过期数据删除、日志大小限制和工作区检查。
 func (s *Scheduler) cleanup(ctx context.Context) {
 	cutoff := time.Now().AddDate(0, 0, -s.cfg.Thresholds.LogRetentionDays)
+	// 删除过期的资源快照
 	if err := s.repos.ResourceSnapshots.DeleteOlderThan(cutoff); err != nil {
 		slog.Error("cleanup resource snapshots", "error", err)
 	}
+	// 删除过期的事件
 	if err := s.repos.Events.DeleteOlderThan(cutoff); err != nil {
 		slog.Error("cleanup events", "error", err)
 	}
+	// 清理过期的日志文件
 	if err := s.terminal.CleanupOldLogs(s.cfg.Thresholds.LogRetentionDays); err != nil {
 		slog.Error("cleanup old log files", "error", err)
 	}
@@ -481,6 +528,7 @@ func (s *Scheduler) cleanup(ctx context.Context) {
 	slog.Info("cleanup completed", "cutoff", cutoff)
 }
 
+// enforceLogSizeLimit 检查并强制执行日志总大小限制。
 func (s *Scheduler) enforceLogSizeLimit() {
 	limitMB := s.cfg.Thresholds.MaxTotalLogSizeMB
 	if limitMB <= 0 {
@@ -496,6 +544,7 @@ func (s *Scheduler) enforceLogSizeLimit() {
 		slog.Warn("total log size exceeds limit, cleaning oldest logs",
 			"current_mb", fmt.Sprintf("%.1f", totalMB),
 			"limit_mb", limitMB)
+		// 清理一半保留期的日志以释放空间
 		retention := s.cfg.Thresholds.LogRetentionDays
 		if retention > 0 {
 			halfRetention := retention / 2
@@ -507,6 +556,7 @@ func (s *Scheduler) enforceLogSizeLimit() {
 	}
 }
 
+// checkWorkspaceSizes 检查所有工作区的大小是否超过限制。
 func (s *Scheduler) checkWorkspaceSizes(ctx context.Context) {
 	maxMB := s.cfg.Thresholds.WorkspaceMaxSizeMB
 	if maxMB <= 0 {
@@ -533,6 +583,7 @@ func (s *Scheduler) checkWorkspaceSizes(ctx context.Context) {
 	}
 }
 
+// workspaceSize 获取指定目录的总大小（MB）。
 func (s *Scheduler) workspaceSize(path string) (float64, error) {
 	out, err := exec.CommandContext(context.Background(), "du", "-sm", path).Output()
 	if err != nil {
@@ -543,6 +594,7 @@ func (s *Scheduler) workspaceSize(path string) (float64, error) {
 	return sizeMB, nil
 }
 
+// checkProcessTree 检查活跃 Agent 的子进程数量是否异常。
 func (s *Scheduler) checkProcessTree(ctx context.Context) {
 	activeAgents, err := s.repos.AgentInstances.ListActiveWithTasks()
 	if err != nil {
@@ -563,6 +615,7 @@ func (s *Scheduler) checkProcessTree(ctx context.Context) {
 	}
 }
 
+// countChildProcesses 统计指定进程的子进程数量。
 func (s *Scheduler) countChildProcesses(pid int) int {
 	out, err := exec.CommandContext(context.Background(), "pgrep", "-P", fmt.Sprintf("%d", pid)).Output()
 	if err != nil {
@@ -577,6 +630,7 @@ func (s *Scheduler) countChildProcesses(pid int) int {
 	return lines
 }
 
+// persistTerminalOutputs 将活跃 Agent 的终端输出持久化到日志文件。
 func (s *Scheduler) persistTerminalOutputs(ctx context.Context, activeAgents []storage.ActiveAgentsResult) {
 	for _, entry := range activeAgents {
 		if entry.Agent.Status != domain.AgentStatusRunning {
@@ -591,6 +645,7 @@ func (s *Scheduler) persistTerminalOutputs(ctx context.Context, activeAgents []s
 	}
 }
 
+// collectMetrics 收集系统内存、CPU 和磁盘使用率。
 func (s *Scheduler) collectMetrics() (float64, float64, float64) {
 	var memPercent, cpuPercent, diskPercent float64
 
@@ -606,6 +661,7 @@ func (s *Scheduler) collectMetrics() (float64, float64, float64) {
 		diskPercent = diskStat.UsedPercent
 	}
 
+	// macOS 下尝试获取 /Volumes 的磁盘使用率
 	if runtime.GOOS == "darwin" {
 		if diskStat, err := disk.Usage("/Volumes"); err == nil && diskPercent == 0 {
 			diskPercent = diskStat.UsedPercent
@@ -615,6 +671,7 @@ func (s *Scheduler) collectMetrics() (float64, float64, float64) {
 	return memPercent, cpuPercent, diskPercent
 }
 
+// determinePressure 根据内存和磁盘使用率确定系统压力等级。
 func (s *Scheduler) determinePressure(memPercent, diskPercent float64) PressureLevel {
 	cfg := s.cfg.Thresholds
 
@@ -630,6 +687,7 @@ func (s *Scheduler) determinePressure(memPercent, diskPercent float64) PressureL
 	return PressureNormal
 }
 
+// CanAdmit 判断是否可以接纳新任务，考虑并发限制和资源等级。
 func (s *Scheduler) CanAdmit(activeCount int, resourceClass domain.ResourceClass) bool {
 	cfg := s.cfg.Scheduler
 
@@ -644,6 +702,7 @@ func (s *Scheduler) CanAdmit(activeCount int, resourceClass domain.ResourceClass
 	return true
 }
 
+// ptrString 返回字符串的指针（用于可选字段）。
 func ptrString(s string) *string {
 	return &s
 }

@@ -1,3 +1,5 @@
+// Package orchestrator 实现运行编排器，负责任务运行的创建、工作流实例化、
+// 任务完成/失败处理以及依赖任务解除阻塞等核心编排逻辑。
 package orchestrator
 
 import (
@@ -11,14 +13,17 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/storage"
 )
 
+// Orchestrator 是运行编排器，协调运行（Run）和任务（Task）的生命周期。
 type Orchestrator struct {
 	repos *storage.Repos
 }
 
+// NewOrchestrator 创建编排器实例。
 func NewOrchestrator(repos *storage.Repos) *Orchestrator {
 	return &Orchestrator{repos: repos}
 }
 
+// CreateRun 创建一个新的运行实例。如果指定了工作流模板，会自动实例化其中的任务。
 func (o *Orchestrator) CreateRun(ctx context.Context, projectID, templateID, title, description string) (*domain.Run, error) {
 	run := &domain.Run{
 		ID:                 uuid.New().String(),
@@ -34,6 +39,7 @@ func (o *Orchestrator) CreateRun(ctx context.Context, projectID, templateID, tit
 		return nil, err
 	}
 
+	// 如果关联了工作流模板，实例化模板中的所有任务
 	if templateID != "" {
 		if err := o.instantiateWorkflow(ctx, run); err != nil {
 			slog.Error("instantiate workflow", "run_id", run.ID, "error", err)
@@ -44,12 +50,15 @@ func (o *Orchestrator) CreateRun(ctx context.Context, projectID, templateID, tit
 	return run, nil
 }
 
+// instantiateWorkflow 根据工作流模板实例化任务节点和依赖关系。
+// 会检测工作流中的环，发现环时清除所有边以避免死锁。
 func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run) error {
 	template, err := o.repos.WorkflowTemplates.GetByID(run.WorkflowTemplateID)
 	if err != nil || template == nil {
 		return err
 	}
 
+	// 解析节点和边
 	var nodes []domain.WorkflowNode
 	if err := json.Unmarshal([]byte(template.NodesJSON), &nodes); err != nil {
 		return err
@@ -62,11 +71,13 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		}
 	}
 
+	// 构建依赖映射：目标节点 -> 其依赖的源节点列表
 	dependencyMap := make(map[string][]string)
 	for _, edge := range edges {
 		dependencyMap[edge.To] = append(dependencyMap[edge.To], edge.From)
 	}
 
+	// 使用 DFS 检测工作流中是否存在环
 	visited := make(map[string]bool)
 	var dfs func(nodeID string) bool
 	dfs = func(nodeID string) bool {
@@ -76,7 +87,7 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		visited[nodeID] = true
 		for _, dep := range dependencyMap[nodeID] {
 			if visited[dep] {
-				return true
+				return true // 发现环
 			}
 			if dfs(dep) {
 				return true
@@ -88,21 +99,25 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 	for _, node := range nodes {
 		if dfs(node.ID) {
 			slog.Warn("cycle detected in workflow edges", "run_id", run.ID)
+			// 发现环时清除所有边，降级为无依赖模式
 			edges = nil
 			dependencyMap = make(map[string][]string)
 			break
 		}
 	}
 
+	// 为每个节点创建任务实例
 	nodeTaskMap := make(map[string]string)
 	for _, node := range nodes {
 		taskSpec, _ := o.repos.TaskSpecs.GetByID(node.TaskSpecID)
 
+		// 确定任务的资源等级
 		resourceClass := domain.ResourceClassLight
 		if taskSpec != nil {
 			resourceClass = taskSpec.ResourceClass
 		}
 
+		// 有依赖的任务初始为 blocked 状态，无依赖的为 queued
 		hasDeps := len(dependencyMap[node.ID]) > 0
 		initialStatus := domain.TaskStatusQueued
 		if hasDeps {
@@ -133,6 +148,7 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		slog.Info("task created from template", "run_id", run.ID, "task_id", task.ID, "label", node.Label, "status", initialStatus)
 	}
 
+	// 所有任务创建后，将运行状态更新为 running
 	if err := o.repos.Runs.UpdateStatus(run.ID, domain.RunStatusRunning); err != nil {
 		return err
 	}
@@ -140,6 +156,8 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 	return nil
 }
 
+// UnblockDependentTasks 检查并解除因依赖被阻塞的任务。
+// 当一个任务完成后，检查所有被它阻塞的任务是否可以解除阻塞。
 func (o *Orchestrator) UnblockDependentTasks(ctx context.Context, completedTaskID string) error {
 	tasks, err := o.repos.Tasks.ListByStatus(domain.TaskStatusBlocked)
 	if err != nil {
@@ -156,6 +174,7 @@ func (o *Orchestrator) UnblockDependentTasks(ctx context.Context, completedTaskI
 			continue
 		}
 
+		// 检查所有依赖任务是否都已完成
 		allMet := true
 		for _, depTaskID := range deps {
 			depTask, err := o.repos.Tasks.GetByID(depTaskID)
@@ -182,6 +201,8 @@ func (o *Orchestrator) UnblockDependentTasks(ctx context.Context, completedTaskI
 	return nil
 }
 
+// getTaskDependencies 获取任务的所有前置依赖任务 ID。
+// 通过查询运行关联的工作流模板，找到指向当前任务节点的所有边。
 func (o *Orchestrator) getTaskDependencies(task *domain.Task) []string {
 	if task.RunID == "" {
 		return nil
@@ -208,6 +229,7 @@ func (o *Orchestrator) getTaskDependencies(task *domain.Task) []string {
 		return nil
 	}
 
+	// 建立 节点 <-> 任务 的双向映射
 	nodeTaskMap := make(map[string]string)
 	taskNodeMap := make(map[string]string)
 	for _, n := range nodes {
@@ -220,8 +242,10 @@ func (o *Orchestrator) getTaskDependencies(task *domain.Task) []string {
 		}
 	}
 
+	// 找到当前任务对应的节点
 	nodeID = taskNodeMap[task.ID]
 
+	// 收集所有指向该节点的上游任务 ID
 	var depTaskIDs []string
 	for _, edge := range edges {
 		if edge.To == nodeID {
@@ -234,6 +258,7 @@ func (o *Orchestrator) getTaskDependencies(task *domain.Task) []string {
 	return depTaskIDs
 }
 
+// CompleteTask 标记任务为已完成，并检查运行中的所有任务是否都已完成。
 func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
 	task, err := o.repos.Tasks.GetByID(taskID)
 	if err != nil || task == nil {
@@ -249,10 +274,12 @@ func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
 
 	o.emitEvent(ctx, task.RunID, &taskID, nil, domain.EventTypeTaskCompleted, "task completed")
 
+	// 尝试解除依赖该任务的阻塞任务
 	if err := o.UnblockDependentTasks(ctx, taskID); err != nil {
 		slog.Error("unblock dependent tasks", "error", err)
 	}
 
+	// 检查运行中的所有任务是否都已结束
 	tasks, err := o.repos.Tasks.ListByRun(task.RunID)
 	if err != nil {
 		return err
@@ -272,6 +299,7 @@ func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
 		}
 	}
 
+	// 所有任务结束后，更新运行的最终状态
 	if allDone {
 		finalStatus := domain.RunStatusCompleted
 		if hasFailed {
@@ -286,6 +314,7 @@ func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
 	return nil
 }
 
+// FailTask 标记任务为失败。如果工作流模板的失败策略为 abort，则同时中止整个运行。
 func (o *Orchestrator) FailTask(ctx context.Context, taskID, reason string) error {
 	task, err := o.repos.Tasks.GetByID(taskID)
 	if err != nil || task == nil {
@@ -298,6 +327,7 @@ func (o *Orchestrator) FailTask(ctx context.Context, taskID, reason string) erro
 
 	o.emitEvent(ctx, task.RunID, &taskID, nil, domain.EventTypeTaskFailed, reason)
 
+	// 检查工作流模板的失败策略
 	if task.RunID != "" {
 		run, _ := o.repos.Runs.GetByID(task.RunID)
 		if run != nil && run.WorkflowTemplateID != "" {
@@ -312,6 +342,7 @@ func (o *Orchestrator) FailTask(ctx context.Context, taskID, reason string) erro
 	return nil
 }
 
+// emitEvent 创建并持久化一个系统事件。
 func (o *Orchestrator) emitEvent(ctx context.Context, runID string, taskID, agentID *string, eventType domain.EventType, message string) {
 	event := &domain.Event{
 		ID:        uuid.New().String(),

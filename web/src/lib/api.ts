@@ -1,5 +1,9 @@
+// api.ts - API 客户端工具库
+// 封装与后端 API 的通信，定义所有领域模型的 TypeScript 接口和通用状态映射。
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '';
 
+// apiFetch 是统一的 API 请求函数，自动添加 JSON 头并处理错误响应
 export async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
@@ -12,6 +16,9 @@ export async function apiFetch<T>(path: string, options?: RequestInit): Promise<
   return res.json();
 }
 
+// ==================== 领域模型接口 ====================
+
+// Project 项目实体
 export interface Project {
   id: string;
   name: string;
@@ -21,6 +28,7 @@ export interface Project {
   updated_at: string;
 }
 
+// Run 运行实体
 export interface Run {
   id: string;
   project_id: string;
@@ -32,6 +40,7 @@ export interface Run {
   updated_at: string;
 }
 
+// Task 任务实体
 export interface Task {
   id: string;
   run_id: string;
@@ -47,6 +56,7 @@ export interface Task {
   updated_at: string;
 }
 
+// AgentInstance Agent 实例
 export interface AgentInstance {
   id: string;
   run_id: string;
@@ -59,6 +69,7 @@ export interface AgentInstance {
   updated_at: string;
 }
 
+// Event 系统事件
 export interface Event {
   id: string;
   run_id: string;
@@ -69,6 +80,7 @@ export interface Event {
   created_at: string;
 }
 
+// ResourceSnapshot 系统资源快照
 export interface ResourceSnapshot {
   id: string;
   memory_percent: number;
@@ -79,6 +91,7 @@ export interface ResourceSnapshot {
   created_at: string;
 }
 
+// TerminalSession 终端会话
 export interface TerminalSession {
   id: string;
   task_id: string;
@@ -88,6 +101,7 @@ export interface TerminalSession {
   created_at: string;
 }
 
+// WorkflowTemplate 工作流模板
 export interface WorkflowTemplate {
   id: string;
   name: string;
@@ -97,6 +111,9 @@ export interface WorkflowTemplate {
   on_failure: string;
 }
 
+// ==================== 状态颜色映射 ====================
+
+// statusColors 将任务/Agent 状态映射到 Tailwind CSS 类名
 export const statusColors: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
   queued: 'bg-gray-100 text-gray-800',
@@ -116,6 +133,7 @@ export const statusColors: Record<string, string> = {
   closed: 'bg-gray-200 text-gray-600',
 };
 
+// pressureColors 将资源压力等级映射到 Tailwind 文字颜色类名
 export const pressureColors: Record<string, string> = {
   normal: 'text-green-600',
   warn: 'text-yellow-600',

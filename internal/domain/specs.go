@@ -1,5 +1,8 @@
+// Package domain 的 specs 文件定义任务规格、Agent 规格和工作流模板等描述性模型。
+// 这些模型用于描述"如何执行"，而非"执行状态"（状态由 models.go 中的实体跟踪）。
 package domain
 
+// TaskSpec 描述一类任务的执行规范，包括运行时类型、命令模板、超时和重试策略等。
 type TaskSpec struct {
 	ID              string        `json:"id" db:"id"`
 	Name            string        `json:"name" db:"name"`
@@ -15,6 +18,7 @@ type TaskSpec struct {
 	ExpectedOutputs string        `json:"expected_outputs,omitempty" db:"expected_outputs"`
 }
 
+// AgentSpec 描述一类 Agent 的能力和运行参数。
 type AgentSpec struct {
 	ID                string   `json:"id" db:"id"`
 	Name              string   `json:"name" db:"name"`
@@ -27,6 +31,7 @@ type AgentSpec struct {
 	OutputParser      string   `json:"output_parser" db:"output_parser"`
 }
 
+// WorkflowTemplate 描述一个工作流模板，由节点和边组成的 DAG 定义任务执行顺序。
 type WorkflowTemplate struct {
 	ID           string                `json:"id" db:"id"`
 	Name         string                `json:"name" db:"name"`
@@ -36,13 +41,15 @@ type WorkflowTemplate struct {
 	OnFailure    string                `json:"on_failure" db:"on_failure"`
 }
 
+// WorkflowNode 表示工作流中的一个节点，关联一个 TaskSpec。
 type WorkflowNode struct {
 	ID         string `json:"id"`
 	TaskSpecID string `json:"task_spec_id"`
 	Label      string `json:"label"`
 }
 
+// WorkflowEdge 表示工作流中两个节点之间的依赖关系（有向边）。
 type WorkflowEdge struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From string `json:"from"` // 上游节点 ID
+	To   string `json:"to"`   // 下游节点 ID
 }

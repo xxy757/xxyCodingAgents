@@ -1,3 +1,5 @@
+// Package storage 提供数据库连接管理和版本化迁移功能。
+// 使用 SQLite 作为底层存储，支持 WAL 模式以提升并发性能。
 package storage
 
 import (
@@ -5,13 +7,16 @@ import (
 	"fmt"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/mattn/go-sqlite3" // SQLite 驱动
 )
 
+// DB 封装 sql.DB，提供数据库连接和迁移管理。
 type DB struct {
 	*sql.DB
 }
 
+// NewDB 创建并初始化 SQLite 数据库连接。
+// walMode 为 true 时启用 WAL 日志模式以支持并发读写。
 func NewDB(dbPath string, walMode bool, busyTimeoutMs int) (*DB, error) {
 	dsn := fmt.Sprintf("%s?_busy_timeout=%d&_journal_mode=WAL&_foreign_keys=1", dbPath, busyTimeoutMs)
 	db, err := sql.Open("sqlite3", dsn)
@@ -19,6 +24,7 @@ func NewDB(dbPath string, walMode bool, busyTimeoutMs int) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	// 配置连接池参数
 	if walMode {
 		db.SetMaxOpenConns(5)
 	} else {
@@ -35,17 +41,20 @@ func NewDB(dbPath string, walMode bool, busyTimeoutMs int) (*DB, error) {
 	return &DB{db}, nil
 }
 
+// RunMigrations 执行所有未应用的数据库迁移，按版本号顺序执行。
 func (db *DB) RunMigrations() error {
+	// 创建迁移版本记录表
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INTEGER PRIMARY KEY,
-			name TEXT NOT NULL,
-			applied_at DATETIME NOT NULL DEFAULT (datetime('now'))
+				version INTEGER PRIMARY KEY,
+				name TEXT NOT NULL,
+				applied_at DATETIME NOT NULL DEFAULT (datetime('now'))
 		)
 	`); err != nil {
 		return fmt.Errorf("create schema_migrations table: %w", err)
 	}
 
+	// 按顺序定义所有迁移
 	migrations := []struct {
 		Name string
 		SQL  string
@@ -67,12 +76,14 @@ func (db *DB) RunMigrations() error {
 	}
 
 	for i, m := range migrations {
+		// 检查该版本是否已应用
 		var count int
 		db.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = ?", i+1).Scan(&count)
 		if count > 0 {
 			continue
 		}
 
+		// 在事务中执行迁移
 		tx, err := db.Begin()
 		if err != nil {
 			return fmt.Errorf("begin migration transaction for %s: %w", m.Name, err)
@@ -95,12 +106,16 @@ func (db *DB) RunMigrations() error {
 	return nil
 }
 
+// CurrentVersion 返回当前已应用的最高迁移版本号。
 func (db *DB) CurrentVersion() (int, error) {
 	var version int
 	err := db.QueryRow("SELECT COALESCE(MAX(version), 0) FROM schema_migrations").Scan(&version)
 	return version, err
 }
 
+// 以下是所有迁移的 SQL 定义，每个常量对应一个表或索引的创建语句。
+
+// migrateProjects 创建项目表
 const migrateProjects = `
 CREATE TABLE IF NOT EXISTS projects (
     id TEXT PRIMARY KEY,
@@ -111,6 +126,7 @@ CREATE TABLE IF NOT EXISTS projects (
     updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );`
 
+// migrateRuns 创建运行表，关联项目
 const migrateRuns = `
 CREATE TABLE IF NOT EXISTS runs (
     id TEXT PRIMARY KEY,
@@ -125,6 +141,7 @@ CREATE TABLE IF NOT EXISTS runs (
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );`
 
+// migrateTasks 创建任务表，关联运行
 const migrateTasks = `
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
@@ -151,6 +168,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );`
 
+// migrateAgentInstances 创建 Agent 实例表，关联运行和任务
 const migrateAgentInstances = `
 CREATE TABLE IF NOT EXISTS agent_instances (
     id TEXT PRIMARY KEY,
@@ -172,6 +190,7 @@ CREATE TABLE IF NOT EXISTS agent_instances (
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );`
 
+// migrateWorkspaces 创建工作区表
 const migrateWorkspaces = `
 CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
@@ -187,6 +206,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     FOREIGN KEY (project_id) REFERENCES projects(id)
 );`
 
+// migrateTerminalSessions 创建终端会话表
 const migrateTerminalSessions = `
 CREATE TABLE IF NOT EXISTS terminal_sessions (
     id TEXT PRIMARY KEY,
@@ -201,6 +221,7 @@ CREATE TABLE IF NOT EXISTS terminal_sessions (
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );`
 
+// migrateCheckpoints 创建检查点表
 const migrateCheckpoints = `
 CREATE TABLE IF NOT EXISTS checkpoints (
     id TEXT PRIMARY KEY,
@@ -216,6 +237,7 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );`
 
+// migrateResourceSnapshots 创建资源快照表
 const migrateResourceSnapshots = `
 CREATE TABLE IF NOT EXISTS resource_snapshots (
     id TEXT PRIMARY KEY,
@@ -227,6 +249,7 @@ CREATE TABLE IF NOT EXISTS resource_snapshots (
     created_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );`
 
+// migrateEvents 创建事件表
 const migrateEvents = `
 CREATE TABLE IF NOT EXISTS events (
     id TEXT PRIMARY KEY,
@@ -240,6 +263,7 @@ CREATE TABLE IF NOT EXISTS events (
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );`
 
+// migrateCommandLogs 创建命令日志表
 const migrateCommandLogs = `
 CREATE TABLE IF NOT EXISTS command_logs (
     id TEXT PRIMARY KEY,
@@ -253,6 +277,7 @@ CREATE TABLE IF NOT EXISTS command_logs (
     FOREIGN KEY (task_id) REFERENCES tasks(id)
 );`
 
+// migrateTaskSpecs 创建任务规格表
 const migrateTaskSpecs = `
 CREATE TABLE IF NOT EXISTS task_specs (
     id TEXT PRIMARY KEY,
@@ -269,6 +294,7 @@ CREATE TABLE IF NOT EXISTS task_specs (
     expected_outputs TEXT NOT NULL DEFAULT ''
 );`
 
+// migrateAgentSpecs 创建 Agent 规格表
 const migrateAgentSpecs = `
 CREATE TABLE IF NOT EXISTS agent_specs (
     id TEXT PRIMARY KEY,
@@ -282,6 +308,7 @@ CREATE TABLE IF NOT EXISTS agent_specs (
     output_parser TEXT NOT NULL DEFAULT 'default'
 );`
 
+// migrateWorkflowTemplates 创建工作流模板表
 const migrateWorkflowTemplates = `
 CREATE TABLE IF NOT EXISTS workflow_templates (
     id TEXT PRIMARY KEY,
@@ -292,6 +319,7 @@ CREATE TABLE IF NOT EXISTS workflow_templates (
     on_failure TEXT NOT NULL DEFAULT 'abort'
 );`
 
+// migrateIndexes 创建常用查询的数据库索引
 const migrateIndexes = `
 CREATE INDEX IF NOT EXISTS idx_runs_project_status ON runs(project_id, status, created_at);
 CREATE INDEX IF NOT EXISTS idx_tasks_run_status ON tasks(run_id, status, priority, created_at);

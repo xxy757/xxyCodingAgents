@@ -1,3 +1,5 @@
+// Package api 的 handlers 文件实现所有 API 端点的请求处理逻辑。
+// 涵盖项目、运行、任务、Agent、终端和系统的 CRUD 操作。
 package api
 
 import (
@@ -14,6 +16,7 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/domain"
 )
 
+// handleCreateProject 处理创建项目的请求，需要提供项目名称。
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string `json:"name"`
@@ -45,6 +48,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, p)
 }
 
+// handleListProjects 处理列出所有项目的请求。
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	projects, err := s.repos.Projects.List()
 	if err != nil {
@@ -58,6 +62,7 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, projects)
 }
 
+// handleGetProject 处理根据 ID 获取单个项目的请求。
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	p, err := s.repos.Projects.GetByID(id)
@@ -73,6 +78,7 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, p)
 }
 
+// handleCreateRun 处理创建运行的请求，需要关联已有项目并提供标题。
 func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ProjectID   string `json:"project_id"`
@@ -89,6 +95,7 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 验证关联的项目是否存在
 	project, err := s.repos.Projects.GetByID(req.ProjectID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to verify project")
@@ -99,6 +106,7 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 通过编排器创建运行，可能实例化工作流
 	run, err := s.orch.CreateRun(r.Context(), req.ProjectID, req.TemplateID, req.Title, req.Description)
 	if err != nil {
 		slog.Error("create run", "error", err)
@@ -108,6 +116,7 @@ func (s *Server) handleCreateRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, run)
 }
 
+// handleListAllRuns 处理列出所有运行的请求。
 func (s *Server) handleListAllRuns(w http.ResponseWriter, r *http.Request) {
 	runs, err := s.repos.Runs.ListAll()
 	if err != nil {
@@ -121,6 +130,7 @@ func (s *Server) handleListAllRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runs)
 }
 
+// handleGetRun 处理根据 ID 获取单个运行的请求。
 func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	run, err := s.repos.Runs.GetByID(id)
@@ -136,6 +146,7 @@ func (s *Server) handleGetRun(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, run)
 }
 
+// handleGetRunTimeline 处理获取运行事件时间线的请求。
 func (s *Server) handleGetRunTimeline(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	events, err := s.repos.Events.ListByRun(id)
@@ -150,6 +161,7 @@ func (s *Server) handleGetRunTimeline(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, events)
 }
 
+// handleListRuns 处理列出指定项目下所有运行的请求。
 func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	runs, err := s.repos.Runs.ListByProject(projectID)
@@ -164,6 +176,7 @@ func (s *Server) handleListRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runs)
 }
 
+// handleListTasks 处理列出指定运行下所有任务的请求。
 func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	runID := r.PathValue("id")
 	tasks, err := s.repos.Tasks.ListByRun(runID)
@@ -178,6 +191,7 @@ func (s *Server) handleListTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tasks)
 }
 
+// handleRunWorkflow 处理获取运行工作流图的请求，返回 ReactFlow 兼容的图数据。
 func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	runID := r.PathValue("id")
 	run, err := s.repos.Runs.GetByID(runID)
@@ -195,6 +209,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		tasks = []*domain.Task{}
 	}
 
+	// 定义 ReactFlow 兼容的图数据结构
 	type NodeData struct {
 		Label    string `json:"label"`
 		Status   string `json:"status"`
@@ -221,6 +236,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 
 	graph := WorkflowGraph{}
 
+	// 如果运行关联了工作流模板，按模板构建图
 	if run.WorkflowTemplateID != "" {
 		template, _ := s.repos.WorkflowTemplates.GetByID(run.WorkflowTemplateID)
 		if template != nil {
@@ -231,6 +247,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 				json.Unmarshal([]byte(template.EdgesJSON), &edges)
 			}
 
+			// 建立节点到任务状态和 ID 的映射
 			nodeStatusMap := make(map[string]string)
 			nodeTaskIDMap := make(map[string]string)
 			for _, t := range tasks {
@@ -242,6 +259,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			// 构建节点数据
 			for i, n := range nodes {
 				graph.Nodes = append(graph.Nodes, struct {
 					ID       string   `json:"id"`
@@ -270,6 +288,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 
+			// 构建边数据
 			for i, e := range edges {
 				graph.Edges = append(graph.Edges, EdgeData{
 					ID:     fmt.Sprintf("edge-%d", i),
@@ -280,6 +299,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// 如果没有模板或模板没有节点，则按任务列表构建简化图
 	if len(graph.Nodes) == 0 {
 		for i, t := range tasks {
 			graph.Nodes = append(graph.Nodes, struct {
@@ -313,6 +333,7 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, graph)
 }
 
+// handleRetryTask 处理重试失败或已取消任务的请求，创建新的任务实例。
 func (s *Server) handleRetryTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	task, err := s.repos.Tasks.GetByID(id)
@@ -324,11 +345,13 @@ func (s *Server) handleRetryTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
+	// 只有失败或已取消的任务才能重试
 	if task.Status != domain.TaskStatusFailed && task.Status != domain.TaskStatusCancelled {
 		writeError(w, http.StatusBadRequest, "only failed or cancelled tasks can be retried")
 		return
 	}
 
+	// 检查重试次数限制（最多 3 次）
 	maxAttempt, err := s.repos.Tasks.MaxAttemptNo(task.RunID, task.TaskType)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to get max attempt")
@@ -339,6 +362,7 @@ func (s *Server) handleRetryTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 创建新的任务实例作为重试
 	newTask := &domain.Task{
 		ID:            uuid.New().String(),
 		RunID:         task.RunID,
@@ -365,6 +389,7 @@ func (s *Server) handleRetryTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, newTask)
 }
 
+// handleCancelTask 处理取消任务的请求。
 func (s *Server) handleCancelTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	task, err := s.repos.Tasks.GetByID(id)
@@ -376,6 +401,7 @@ func (s *Server) handleCancelTask(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "task not found")
 		return
 	}
+	// 已经处于终态的任务直接返回
 	if isTerminalTaskStatus(task.Status) {
 		writeJSON(w, http.StatusOK, task)
 		return
@@ -388,10 +414,12 @@ func (s *Server) handleCancelTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, task)
 }
 
+// isTerminalTaskStatus 判断任务状态是否为终态（不可再变更）。
 func isTerminalTaskStatus(status domain.TaskStatus) bool {
 	return status == domain.TaskStatusCompleted || status == domain.TaskStatusCancelled || status == domain.TaskStatusFailed || status == domain.TaskStatusEvicted
 }
 
+// handleListAgents 处理列出所有 Agent 实例的请求。
 func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	agents, err := s.repos.AgentInstances.ListAll()
 	if err != nil {
@@ -405,6 +433,7 @@ func (s *Server) handleListAgents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agents)
 }
 
+// handleGetAgent 处理根据 ID 获取单个 Agent 实例的请求。
 func (s *Server) handleGetAgent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	agent, err := s.repos.AgentInstances.GetByID(id)
@@ -419,6 +448,7 @@ func (s *Server) handleGetAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agent)
 }
 
+// handlePauseAgent 处理暂停 Agent 的请求，仅运行中的 Agent 可暂停。
 func (s *Server) handlePauseAgent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	agent, err := s.repos.AgentInstances.GetByID(id)
@@ -446,6 +476,7 @@ func (s *Server) handlePauseAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agent)
 }
 
+// handleResumeAgent 处理恢复 Agent 的请求，仅已暂停的 Agent 可恢复。
 func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	agent, err := s.repos.AgentInstances.GetByID(id)
@@ -473,6 +504,7 @@ func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agent)
 }
 
+// handleStopAgent 处理停止 Agent 的请求，终止其 tmux 会话并更新状态。
 func (s *Server) handleStopAgent(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	agent, err := s.repos.AgentInstances.GetByID(id)
@@ -489,6 +521,7 @@ func (s *Server) handleStopAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 终止 Agent 的 tmux 会话
 	if agent.TmuxSession != "" {
 		if err := s.termMgr.KillSession(r.Context(), agent.TmuxSession); err != nil {
 			slog.Warn("kill tmux session on agent stop", "agent_id", id, "session", agent.TmuxSession, "error", err)
@@ -503,6 +536,7 @@ func (s *Server) handleStopAgent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, agent)
 }
 
+// handleListTerminals 处理列出所有终端会话的请求。
 func (s *Server) handleListTerminals(w http.ResponseWriter, r *http.Request) {
 	terminals, err := s.repos.TerminalSessions.ListAll()
 	if err != nil {
@@ -516,6 +550,7 @@ func (s *Server) handleListTerminals(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, terminals)
 }
 
+// handleCreateTerminal 处理创建终端会话的请求，创建 tmux 会话并持久化记录。
 func (s *Server) handleCreateTerminal(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		TaskID string `json:"task_id"`
@@ -540,6 +575,7 @@ func (s *Server) handleCreateTerminal(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:   time.Now(),
 	}
 
+	// 创建 tmux 会话
 	cmd := exec.Command("tmux", "new-session", "-d", "-s", sessionName)
 	if err := cmd.Run(); err != nil {
 		slog.Error("create tmux session", "error", err)
@@ -547,6 +583,7 @@ func (s *Server) handleCreateTerminal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 持久化终端会话记录，失败时清理 tmux 会话
 	if err := s.repos.TerminalSessions.Create(ts); err != nil {
 		slog.Error("save terminal session", "error", err)
 		_ = exec.Command("tmux", "kill-session", "-t", sessionName).Run()
@@ -556,6 +593,7 @@ func (s *Server) handleCreateTerminal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, ts)
 }
 
+// handleGetTerminal 处理根据 ID 获取终端会话的请求。
 func (s *Server) handleGetTerminal(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ts, err := s.repos.TerminalSessions.GetByID(id)
@@ -570,6 +608,7 @@ func (s *Server) handleGetTerminal(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, ts)
 }
 
+// handleTerminalWS 处理终端 WebSocket 连接，实现双向终端交互。
 func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	ts, err := s.repos.TerminalSessions.GetByID(id)
@@ -578,6 +617,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 升级为 WebSocket 连接
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		slog.Error("websocket upgrade", "error", err)
@@ -585,6 +625,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// 发送终端当前内容
 	output, _ := s.termMgr.CapturePane(r.Context(), ts.TmuxSession)
 	if output != "" {
 		conn.WriteJSON(map[string]string{"type": "output", "data": output})
@@ -593,6 +634,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
+	// 后台 goroutine：定时轮询终端输出并推送增量更新
 	go func() {
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
@@ -606,6 +648,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					continue
 				}
+				// 仅在内容变化时发送更新
 				if out != lastOutput {
 					lastOutput = out
 					conn.WriteJSON(map[string]string{"type": "output", "data": out})
@@ -614,6 +657,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
+	// 主循环：读取客户端输入并转发到 tmux
 	for {
 		_, msg, err := conn.ReadMessage()
 		if err != nil {
@@ -629,6 +673,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleSystemMetrics 处理获取系统资源指标的请求。
 func (s *Server) handleSystemMetrics(w http.ResponseWriter, r *http.Request) {
 	snapshot, err := s.repos.ResourceSnapshots.Latest()
 	if err != nil {
@@ -636,6 +681,7 @@ func (s *Server) handleSystemMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if snapshot == nil {
+		// 没有快照数据时返回零值
 		writeJSON(w, http.StatusOK, map[string]any{
 			"memory_percent": 0,
 			"cpu_percent":    0,
@@ -648,15 +694,18 @@ func (s *Server) handleSystemMetrics(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snapshot)
 }
 
+// handleDiagnostics 处理获取系统诊断信息的请求，包含资源快照、tmux 会话和活跃 Agent。
 func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	snapshot, _ := s.repos.ResourceSnapshots.Latest()
 
+	// 获取当前 tmux 会话列表
 	tmuxSessions, err := exec.Command("tmux", "list-sessions").Output()
 	tmuxList := "no active tmux sessions"
 	if err == nil {
 		tmuxList = strings.TrimSpace(string(tmuxSessions))
 	}
 
+	// 获取活跃 Agent 列表（带截断 ID）
 	activeAgents := []string{}
 	active, err := s.repos.AgentInstances.ListActiveWithTasks()
 	if err == nil {
@@ -680,6 +729,7 @@ func (s *Server) handleDiagnostics(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleListTaskSpecs 处理列出所有任务规格的请求。
 func (s *Server) handleListTaskSpecs(w http.ResponseWriter, r *http.Request) {
 	specs, err := s.repos.TaskSpecs.List()
 	if err != nil {
@@ -692,6 +742,7 @@ func (s *Server) handleListTaskSpecs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, specs)
 }
 
+// handleListAgentSpecs 处理列出所有 Agent 规格的请求。
 func (s *Server) handleListAgentSpecs(w http.ResponseWriter, r *http.Request) {
 	specs, err := s.repos.AgentSpecs.List()
 	if err != nil {
@@ -704,6 +755,7 @@ func (s *Server) handleListAgentSpecs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, specs)
 }
 
+// handleListWorkflowTemplates 处理列出所有工作流模板的请求。
 func (s *Server) handleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
 	templates, err := s.repos.WorkflowTemplates.List()
 	if err != nil {
@@ -716,6 +768,7 @@ func (s *Server) handleListWorkflowTemplates(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, templates)
 }
 
+// handleCreateWorkflowTemplate 处理创建工作流模板的请求。
 func (s *Server) handleCreateWorkflowTemplate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name        string `json:"name"`
@@ -737,6 +790,7 @@ func (s *Server) handleCreateWorkflowTemplate(w http.ResponseWriter, r *http.Req
 		EdgesJSON:   req.EdgesJSON,
 		OnFailure:   req.OnFailure,
 	}
+	// 设置默认值
 	if wt.OnFailure == "" {
 		wt.OnFailure = "abort"
 	}

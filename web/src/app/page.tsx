@@ -1,8 +1,12 @@
+// page.tsx - 系统仪表盘首页
+// 展示系统资源指标（Agent 数量、内存、CPU、磁盘、压力等级）和服务状态。
+// 每 5 秒自动刷新数据。
 "use client";
 
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
 
+// Metrics 系统资源指标接口
 interface Metrics {
   memory_percent: number;
   cpu_percent: number;
@@ -11,16 +15,19 @@ interface Metrics {
   pressure_level: string;
 }
 
+// HealthStatus 健康状态接口
 interface HealthStatus {
   status: string;
 }
 
+// DashboardPage 仪表盘首页组件
 export default function DashboardPage() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [ready, setReady] = useState<HealthStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // 并行获取指标和健康状态，每 5 秒刷新一次
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -41,6 +48,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
+  // 指标卡片配置
   const cards = [
     {
       label: "活跃 Agent",
@@ -76,6 +84,7 @@ export default function DashboardPage() {
     },
   ];
 
+  // 服务状态卡片配置
   const serviceCards = [
     {
       label: "后端服务",
@@ -95,6 +104,7 @@ export default function DashboardPage() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
       )}
 
+      {/* 指标卡片网格 */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
         {cards.map((card) => (
           <div key={card.label} className={`p-4 rounded-lg ${card.color}`}>
@@ -104,6 +114,7 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* 服务状态 */}
       <h2 className="text-lg font-semibold mb-4">服务状态</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {serviceCards.map((card) => (

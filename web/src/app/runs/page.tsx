@@ -1,9 +1,12 @@
+// runs/page.tsx - 运行管理页面
+// 展示运行列表，支持创建新运行（可关联项目和工作流模板）。
 "use client";
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 
+// Run 运行数据接口
 interface Run {
   id: string;
   project_id: string;
@@ -12,17 +15,20 @@ interface Run {
   created_at: string;
 }
 
+// Project 项目数据接口
 interface Project {
   id: string;
   name: string;
 }
 
+// WorkflowTemplate 工作流模板接口
 interface WorkflowTemplate {
   id: string;
   name: string;
   description: string;
 }
 
+// RunsPage 运行管理页面组件
 export default function RunsPage() {
   const [runs, setRuns] = useState<Run[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -35,6 +41,7 @@ export default function RunsPage() {
   const [templateId, setTemplateId] = useState("");
   const [creating, setCreating] = useState(false);
 
+  // 加载运行列表、项目列表和工作流模板列表
   useEffect(() => {
     setLoading(true);
     apiFetch<Run[]>("/api/runs")
@@ -54,6 +61,7 @@ export default function RunsPage() {
       .catch(() => {});
   }, []);
 
+  // handleCreate 处理创建运行表单提交
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -79,6 +87,7 @@ export default function RunsPage() {
     }
   };
 
+  // statusColor 根据运行状态返回对应的样式类名
   const statusColor = (status: string) => {
     switch (status) {
       case "running":
@@ -110,6 +119,7 @@ export default function RunsPage() {
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
       )}
 
+      {/* 新建运行表单 */}
       {showForm && (
         <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
           <div>
@@ -164,6 +174,7 @@ export default function RunsPage() {
         </form>
       )}
 
+      {/* 运行列表表格 */}
       {loading ? (
         <div className="text-gray-500">加载中...</div>
       ) : runs.length === 0 ? (
