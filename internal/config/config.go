@@ -5,6 +5,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -13,62 +15,71 @@ import (
 
 // Config 是应用程序的顶层配置结构，包含所有子模块的配置。
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
-	Runtime    RuntimeConfig    `yaml:"runtime"`
-	Scheduler  SchedulerConfig  `yaml:"scheduler"`
-	Thresholds ThresholdsConfig `yaml:"thresholds"`
-	Timeouts   TimeoutsConfig   `yaml:"timeouts"`
-	SQLite     SQLiteConfig     `yaml:"sqlite"`
+	Server       ServerConfig       `yaml:"server"`
+	Runtime      RuntimeConfig      `yaml:"runtime"`
+	Scheduler    SchedulerConfig    `yaml:"scheduler"`
+	Thresholds   ThresholdsConfig   `yaml:"thresholds"`
+	Timeouts     TimeoutsConfig     `yaml:"timeouts"`
+	SQLite       SQLiteConfig       `yaml:"sqlite"`
+	AgentRuntime AgentRuntimeConfig `yaml:"agent_runtime"`
 }
 
 // ServerConfig 定义 HTTP 服务器相关配置。
 type ServerConfig struct {
-	HTTPAddr        string   `yaml:"http_addr"`        // API 服务监听地址，如 ":8080"
-	PprofAddr       string   `yaml:"pprof_addr"`       // pprof 性能分析服务监听地址
-	AllowedOrigins  []string `yaml:"allowed_origins"`  // CORS 允许的来源域名列表
+	HTTPAddr       string   `yaml:"http_addr"`       // API 服务监听地址，如 ":8080"
+	PprofAddr      string   `yaml:"pprof_addr"`      // pprof 性能分析服务监听地址
+	AllowedOrigins []string `yaml:"allowed_origins"` // CORS 允许的来源域名列表
 }
 
 // RuntimeConfig 定义运行时目录路径配置。
 type RuntimeConfig struct {
-	WorkspaceRoot   string `yaml:"workspace_root"`    // Agent 工作区的根目录
-	LogRoot         string `yaml:"log_root"`          // 日志文件存储根目录
-	CheckpointRoot  string `yaml:"checkpoint_root"`   // 检查点文件存储根目录
+	WorkspaceRoot  string `yaml:"workspace_root"`  // Agent 工作区的根目录
+	LogRoot        string `yaml:"log_root"`        // 日志文件存储根目录
+	CheckpointRoot string `yaml:"checkpoint_root"` // 检查点文件存储根目录
 }
 
 // SchedulerConfig 定义调度器相关配置。
 type SchedulerConfig struct {
-	TickSeconds        int `yaml:"tick_seconds"`          // 调度器轮询间隔（秒）
+	TickSeconds         int `yaml:"tick_seconds"`          // 调度器轮询间隔（秒）
 	MaxConcurrentAgents int `yaml:"max_concurrent_agents"` // 最大并发 Agent 数量
-	MaxHeavyAgents     int `yaml:"max_heavy_agents"`      // 最大重型（高资源）Agent 数量
-	MaxTestJobs        int `yaml:"max_test_jobs"`         // 最大测试任务数量
+	MaxHeavyAgents      int `yaml:"max_heavy_agents"`      // 最大重型（高资源）Agent 数量
+	MaxTestJobs         int `yaml:"max_test_jobs"`         // 最大测试任务数量
 }
 
 // ThresholdsConfig 定义资源阈值和清理策略配置。
 type ThresholdsConfig struct {
-	WarnMemoryPercent        int `yaml:"warn_memory_percent"`         // 内存使用率告警阈值（%）
-	HighMemoryPercent        int `yaml:"high_memory_percent"`         // 内存使用率高水位（%），触发负载保护
-	CriticalMemoryPercent    int `yaml:"critical_memory_percent"`     // 内存使用率临界值（%），触发驱逐
-	DiskWarnPercent          int `yaml:"disk_warn_percent"`           // 磁盘使用率告警阈值（%）
-	DiskHighPercent          int `yaml:"disk_high_percent"`           // 磁盘使用率高水位（%）
-	WorkspaceMaxSizeMB       int `yaml:"workspace_max_size_mb"`       // 单个工作区最大体积（MB）
-	LogRetentionDays         int `yaml:"log_retention_days"`          // 日志保留天数
-	MaxTotalLogSizeMB        int `yaml:"max_total_log_size_mb"`       // 日志总大小上限（MB）
+	WarnMemoryPercent         int `yaml:"warn_memory_percent"`           // 内存使用率告警阈值（%）
+	HighMemoryPercent         int `yaml:"high_memory_percent"`           // 内存使用率高水位（%），触发负载保护
+	CriticalMemoryPercent     int `yaml:"critical_memory_percent"`       // 内存使用率临界值（%），触发驱逐
+	DiskWarnPercent           int `yaml:"disk_warn_percent"`             // 磁盘使用率告警阈值（%）
+	DiskHighPercent           int `yaml:"disk_high_percent"`             // 磁盘使用率高水位（%）
+	WorkspaceMaxSizeMB        int `yaml:"workspace_max_size_mb"`         // 单个工作区最大体积（MB）
+	LogRetentionDays          int `yaml:"log_retention_days"`            // 日志保留天数
+	MaxTotalLogSizeMB         int `yaml:"max_total_log_size_mb"`         // 日志总大小上限（MB）
 	MaxChildProcessesPerAgent int `yaml:"max_child_processes_per_agent"` // 每个 Agent 最大子进程数
 }
 
 // TimeoutsConfig 定义各类超时时间配置。
 type TimeoutsConfig struct {
-	HeartbeatTimeoutSeconds   int `yaml:"heartbeat_timeout_seconds"`    // Agent 心跳超时时间（秒）
-	OutputTimeoutSeconds      int `yaml:"output_timeout_seconds"`       // Agent 输出超时时间（秒）
-	StallTimeoutSeconds       int `yaml:"stall_timeout_seconds"`        // Agent 停滞超时时间（秒）
+	HeartbeatTimeoutSeconds   int `yaml:"heartbeat_timeout_seconds"`   // Agent 心跳超时时间（秒）
+	OutputTimeoutSeconds      int `yaml:"output_timeout_seconds"`      // Agent 输出超时时间（秒）
+	StallTimeoutSeconds       int `yaml:"stall_timeout_seconds"`       // Agent 停滞超时时间（秒）
 	CheckpointIntervalSeconds int `yaml:"checkpoint_interval_seconds"` // 定期检查点间隔（秒）
 }
 
 // SQLiteConfig 定义 SQLite 数据库连接配置。
 type SQLiteConfig struct {
-	Path         string `yaml:"path"`           // 数据库文件路径
-	WALMode      bool   `yaml:"wal_mode"`       // 是否启用 WAL 日志模式
-	BusyTimeoutMs int   `yaml:"busy_timeout_ms"` // 数据库忙等待超时（毫秒）
+	Path          string `yaml:"path"`            // 数据库文件路径
+	WALMode       bool   `yaml:"wal_mode"`        // 是否启用 WAL 日志模式
+	BusyTimeoutMs int    `yaml:"busy_timeout_ms"` // 数据库忙等待超时（毫秒）
+}
+
+// AgentRuntimeConfig 定义 agent 启动器相关配置。
+type AgentRuntimeConfig struct {
+	BaseDir           string `yaml:"base_dir"`            // prompt 和 launcher 文件的根目录
+	BrowseCLIPath     string `yaml:"browse_cli_path"`     // gstack browse 二进制绝对路径（空则不启用）
+	PromptTemplateDir string `yaml:"prompt_template_dir"` // PromptEngine 模板目录
+	LearningsRootDir  string `yaml:"learnings_root_dir"`  // gstack learnings 根目录（通常是 ~/.gstack/projects）
 }
 
 // HeartbeatTimeout 将心跳超时秒数转换为 time.Duration。
@@ -132,6 +143,18 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("AI_DEV_CHECKPOINT_ROOT"); v != "" {
 		c.Runtime.CheckpointRoot = v
+	}
+	if v := os.Getenv("AI_DEV_AGENT_RUNTIME_BASE_DIR"); v != "" {
+		c.AgentRuntime.BaseDir = v
+	}
+	if v := os.Getenv("AI_DEV_BROWSE_CLI_PATH"); v != "" {
+		c.AgentRuntime.BrowseCLIPath = v
+	}
+	if v := os.Getenv("AI_DEV_PROMPT_TEMPLATE_DIR"); v != "" {
+		c.AgentRuntime.PromptTemplateDir = v
+	}
+	if v := os.Getenv("AI_DEV_LEARNINGS_ROOT_DIR"); v != "" {
+		c.AgentRuntime.LearningsRootDir = v
 	}
 }
 
@@ -209,4 +232,50 @@ func (c *Config) setDefaults() {
 	if c.SQLite.BusyTimeoutMs == 0 {
 		c.SQLite.BusyTimeoutMs = 5000
 	}
+	if c.AgentRuntime.BaseDir == "" {
+		c.AgentRuntime.BaseDir = "./data/agent-runtime"
+	}
+	if c.AgentRuntime.PromptTemplateDir == "" {
+		c.AgentRuntime.PromptTemplateDir = "./configs/prompts"
+	}
+	if c.AgentRuntime.LearningsRootDir == "" {
+		home, err := os.UserHomeDir()
+		if err == nil && strings.TrimSpace(home) != "" {
+			c.AgentRuntime.LearningsRootDir = filepath.Join(home, ".gstack", "projects")
+		} else {
+			c.AgentRuntime.LearningsRootDir = "./data/learnings/projects"
+		}
+	}
+	// 将相对路径解析为绝对路径（tmux shell 的 cwd 可能不同于 server）
+	c.AgentRuntime.BaseDir = resolveAbsPath(c.AgentRuntime.BaseDir)
+	if c.AgentRuntime.BrowseCLIPath != "" {
+		c.AgentRuntime.BrowseCLIPath = resolveAbsPath(c.AgentRuntime.BrowseCLIPath)
+	}
+	c.AgentRuntime.PromptTemplateDir = resolveAbsPath(c.AgentRuntime.PromptTemplateDir)
+	c.AgentRuntime.LearningsRootDir = resolveAbsPath(c.AgentRuntime.LearningsRootDir)
+}
+
+func resolveAbsPath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil && strings.TrimSpace(home) != "" {
+			if path == "~" {
+				path = home
+			} else {
+				path = filepath.Join(home, strings.TrimPrefix(path, "~/"))
+			}
+		}
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	return abs
 }

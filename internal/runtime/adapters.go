@@ -13,7 +13,7 @@ import (
 )
 
 // ClaudeCodeAdapter 实现 AgentRuntime 接口，针对 Claude Code 类型 Agent。
-// 通过 tmux 会话发送命令并捕获输出。
+// 通过 tmux 会话执行 launcher 脚本。
 type ClaudeCodeAdapter struct{}
 
 // NewClaudeCodeAdapter 创建 Claude Code 适配器实例。
@@ -21,20 +21,23 @@ func NewClaudeCodeAdapter() *ClaudeCodeAdapter {
 	return &ClaudeCodeAdapter{}
 }
 
-// Start 在指定 tmux 会话中发送启动命令。
+// Start 在指定 tmux 会话中执行 launcher 脚本。
+// req.Command 必须是 agentlauncher.Build() 返回的绝对路径。
 func (a *ClaudeCodeAdapter) Start(ctx context.Context, req StartRequest) (*StartResult, error) {
 	if req.TmuxSession == "" {
 		return nil, fmt.Errorf("tmux session is required")
 	}
-
-	// 向 tmux 会话发送启动命令
-	args := []string{"send-keys", "-t", req.TmuxSession, req.Command, "Enter"}
-	cmd := exec.CommandContext(ctx, "tmux", args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("send command to tmux: %w, output: %s", err, string(out))
+	if req.Command == "" {
+		return nil, fmt.Errorf("launcher script path is required")
 	}
 
-	// 获取 tmux 会话的进程 ID
+	// tmux 只执行一条命令：bash launcher.sh
+	args := []string{"send-keys", "-t", req.TmuxSession, fmt.Sprintf("bash %q", req.Command), "Enter"}
+	cmd := exec.CommandContext(ctx, "tmux", args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("send launcher to tmux: %w, output: %s", err, string(out))
+	}
+
 	pid, err := a.getTmuxSessionPID(req.TmuxSession)
 	if err != nil {
 		slog.Warn("get tmux session pid", "session", req.TmuxSession, "error", err)
@@ -125,12 +128,20 @@ func NewGenericShellAdapter() *GenericShellAdapter {
 	return &GenericShellAdapter{}
 }
 
-// Start 在指定 tmux 会话中发送命令。
+// Start 在指定 tmux 会话中执行 launcher 脚本。
+// req.Command 必须是 agentlauncher.Build() 返回的绝对路径。
 func (a *GenericShellAdapter) Start(ctx context.Context, req StartRequest) (*StartResult, error) {
-	args := []string{"send-keys", "-t", req.TmuxSession, req.Command, "Enter"}
+	if req.TmuxSession == "" {
+		return nil, fmt.Errorf("tmux session is required")
+	}
+	if req.Command == "" {
+		return nil, fmt.Errorf("launcher script path is required")
+	}
+
+	args := []string{"send-keys", "-t", req.TmuxSession, fmt.Sprintf("bash %q", req.Command), "Enter"}
 	cmd := exec.CommandContext(ctx, "tmux", args...)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("send command to tmux: %w, output: %s", err, string(out))
+		return nil, fmt.Errorf("send launcher to tmux: %w, output: %s", err, string(out))
 	}
 	return &StartResult{
 		TmuxSession: req.TmuxSession,

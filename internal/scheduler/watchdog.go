@@ -1,6 +1,7 @@
 // Package scheduler 的 watchdog 文件实现看门狗机制。
 // Watchdog 定期检查所有活跃 Agent 的存活状态，
-// 通过 tmux 会话探测、心跳超时和输出超时来检测死亡的 Agent。
+// 通过 tmux 会话探测、心跳超时和输出超时来检测死亡的 Agent，
+// 并对可恢复的 Agent 触发检查点恢复。
 package scheduler
 
 import (
@@ -19,21 +20,23 @@ import (
 
 // Watchdog 是 Agent 存活监控器，定期检查并处理死亡的 Agent。
 type Watchdog struct {
-	cfg      *config.Config
-	repos    *storage.Repos
-	runtime  agentruntime.AgentRuntime
-	terminal *terminal.Manager
-	stop     chan struct{}
+	cfg             *config.Config
+	repos           *storage.Repos
+	runtimeRegistry *agentruntime.AdapterRegistry
+	terminal        *terminal.Manager
+	scheduler       *Scheduler // 用于触发检查点恢复
+	stop            chan struct{}
 }
 
 // NewWatchdog 创建看门狗实例。
-func NewWatchdog(cfg *config.Config, repos *storage.Repos, rt agentruntime.AgentRuntime, tm *terminal.Manager) *Watchdog {
+func NewWatchdog(cfg *config.Config, repos *storage.Repos, registry *agentruntime.AdapterRegistry, tm *terminal.Manager, sched *Scheduler) *Watchdog {
 	return &Watchdog{
-		cfg:      cfg,
-		repos:    repos,
-		runtime:  rt,
-		terminal: tm,
-		stop:     make(chan struct{}),
+		cfg:             cfg,
+		repos:           repos,
+		runtimeRegistry: registry,
+		terminal:        tm,
+		scheduler:       sched,
+		stop:            make(chan struct{}),
 	}
 }
 
@@ -92,7 +95,8 @@ func (w *Watchdog) check(ctx context.Context) {
 		}
 
 		// 通过运行时接口检查 Agent 进程是否存活
-		inspectResult, err := w.runtime.Inspect(ctx, agent.TmuxSession)
+		rt := w.runtimeRegistry.GetOrDefault(agent.AgentKind)
+		inspectResult, err := rt.Inspect(ctx, agent.TmuxSession)
 		if err != nil {
 			slog.Warn("watchdog: inspect agent", "agent_id", agent.ID, "error", err)
 			continue
@@ -104,8 +108,9 @@ func (w *Watchdog) check(ctx context.Context) {
 			continue
 		}
 
-		// 更新心跳时间
+		// 更新心跳时间和最后输出时间
 		w.repos.AgentInstances.UpdateHeartbeat(agent.ID)
+		w.repos.AgentInstances.UpdateLastOutputAt(agent.ID)
 
 		// 检查心跳超时
 		if agent.LastHeartbeatAt != nil {
@@ -128,10 +133,27 @@ func (w *Watchdog) check(ctx context.Context) {
 }
 
 // handleDeadAgent 处理死亡的 Agent，根据重启策略决定标记为失败还是可恢复。
+// 若 Agent 有检查点且允许恢复，则触发检查点恢复流程。
 func (w *Watchdog) handleDeadAgent(ctx context.Context, agent *domain.AgentInstance, task *domain.Task, reason string) {
 	slog.Warn("watchdog: agent dead", "agent_id", agent.ID, "reason", reason, "tmux_session", agent.TmuxSession)
 
-	// 根据任务的重启策略决定新状态
+	// 若重启策略允许且有检查点，尝试恢复
+	if (task.RestartPolicy == "always" || task.RestartPolicy == "on-failure") && agent.CheckpointID != nil {
+		slog.Info("watchdog: attempting checkpoint recovery", "agent_id", agent.ID, "checkpoint_id", *agent.CheckpointID)
+		w.repos.AgentInstances.UpdateStatus(agent.ID, domain.AgentStatusRecoverable)
+		if w.scheduler != nil {
+			if err := w.scheduler.recoverFromCheckpoint(ctx, task.ID); err != nil {
+				slog.Error("watchdog: recovery failed, marking as failed", "agent_id", agent.ID, "error", err)
+				w.repos.AgentInstances.UpdateStatus(agent.ID, domain.AgentStatusFailed)
+				w.repos.Tasks.UpdateStatus(task.ID, domain.TaskStatusFailed)
+				w.scheduler.cleanupTaskArtifacts(task.ID)
+			} else {
+				return // 恢复成功，不需要进一步处理
+			}
+		}
+	}
+
+	// 无法恢复，标记为失败
 	newStatus := domain.AgentStatusFailed
 	if task.RestartPolicy == "always" || task.RestartPolicy == "on-failure" {
 		newStatus = domain.AgentStatusRecoverable
@@ -151,4 +173,7 @@ func (w *Watchdog) handleDeadAgent(ctx context.Context, agent *domain.AgentInsta
 		Metadata:  fmt.Sprintf(`{"reason":"%s","tmux_session":"%s","restart_policy":"%s"}`, reason, agent.TmuxSession, task.RestartPolicy),
 		CreatedAt: time.Now(),
 	})
+	if w.scheduler != nil {
+		w.scheduler.cleanupTaskArtifacts(task.ID)
+	}
 }

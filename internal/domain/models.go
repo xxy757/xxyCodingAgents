@@ -146,7 +146,7 @@ type TerminalSessionStatus string
 
 const (
 	TerminalStatusActive   TerminalSessionStatus = "active"   // 活跃中
-	TerminalStatusDetached TerminalSessionStatus = "detached"` // 已分离
+	TerminalStatusDetached TerminalSessionStatus = "detached" // 已分离
 	TerminalStatusClosed   TerminalSessionStatus = "closed"    // 已关闭
 )
 
@@ -201,7 +201,7 @@ const (
 	EventTypeAgentStopped   EventType = "agent_stopped"    // Agent 已停止
 	EventTypeAgentFailed    EventType = "agent_failed"     // Agent 失败
 	EventTypeAgentHeartbeat EventType = "agent_heartbeat"  // Agent 心跳
-	EventTypeCheckpoint     EventType = "checkpoint_created"` // 检查点已创建
+	EventTypeCheckpoint     EventType = "checkpoint_created" // 检查点已创建
 	EventTypePressureChange EventType = "pressure_change"  // 资源压力变化
 	EventTypeReconcile      EventType = "reconcile"        // 协调事件
 )

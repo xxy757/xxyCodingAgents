@@ -468,6 +468,13 @@ func (s *Server) handlePauseAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot pause agent in %s state", agent.Status))
 		return
 	}
+
+	// 调用运行时暂停 Agent 进程
+	rt := s.runtimeRegistry.GetOrDefault(agent.AgentKind)
+	if err := rt.Pause(r.Context(), agent.TmuxSession); err != nil {
+		slog.Warn("runtime pause agent", "agent_id", id, "error", err)
+	}
+
 	if err := s.repos.AgentInstances.UpdateStatus(id, domain.AgentStatusPaused); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to pause agent")
 		return
@@ -496,6 +503,13 @@ func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("cannot resume agent in %s state", agent.Status))
 		return
 	}
+
+	// 调用运行时恢复 Agent 进程
+	rt := s.runtimeRegistry.GetOrDefault(agent.AgentKind)
+	if err := rt.Resume(r.Context(), agent.TmuxSession); err != nil {
+		slog.Warn("runtime resume agent", "agent_id", id, "error", err)
+	}
+
 	if err := s.repos.AgentInstances.UpdateStatus(id, domain.AgentStatusRunning); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to resume agent")
 		return

@@ -160,6 +160,64 @@ func TestTaskRepo_CRUD(t *testing.T) {
 	}
 }
 
+func TestTaskRepo_MarkRunningAndCompleted(t *testing.T) {
+	repos := setupRepoTestDB(t)
+
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	repos.Runs.Create(&domain.Run{ID: "r1", ProjectID: "p1", Title: "test", Status: domain.RunStatusPending, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	task := &domain.Task{
+		ID:            "t-running",
+		RunID:         "r1",
+		TaskType:      "code",
+		AttemptNo:     1,
+		Status:        domain.TaskStatusQueued,
+		Priority:      domain.PriorityNormal,
+		QueueStatus:   "queued",
+		ResourceClass: domain.ResourceClassLight,
+		Preemptible:   true,
+		RestartPolicy: "never",
+		Title:         "test-task",
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	if err := repos.Tasks.Create(task); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	startedAt := time.Now().Add(-time.Minute).UTC().Truncate(time.Second)
+	if err := repos.Tasks.MarkRunning(task.ID, startedAt); err != nil {
+		t.Fatalf("mark running: %v", err)
+	}
+
+	runningTask, err := repos.Tasks.GetByID(task.ID)
+	if err != nil {
+		t.Fatalf("get after running: %v", err)
+	}
+	if runningTask.Status != domain.TaskStatusRunning {
+		t.Fatalf("expected running status, got %s", runningTask.Status)
+	}
+	if runningTask.StartedAt == nil || !runningTask.StartedAt.Equal(startedAt) {
+		t.Fatalf("expected started_at %v, got %v", startedAt, runningTask.StartedAt)
+	}
+
+	completedAt := time.Now().UTC().Truncate(time.Second)
+	if err := repos.Tasks.MarkCompleted(task.ID, completedAt); err != nil {
+		t.Fatalf("mark completed: %v", err)
+	}
+
+	completedTask, err := repos.Tasks.GetByID(task.ID)
+	if err != nil {
+		t.Fatalf("get after completed: %v", err)
+	}
+	if completedTask.Status != domain.TaskStatusCompleted {
+		t.Fatalf("expected completed status, got %s", completedTask.Status)
+	}
+	if completedTask.CompletedAt == nil || !completedTask.CompletedAt.Equal(completedAt) {
+		t.Fatalf("expected completed_at %v, got %v", completedAt, completedTask.CompletedAt)
+	}
+}
+
 func TestAgentInstanceRepo_CRUD(t *testing.T) {
 	repos := setupRepoTestDB(t)
 
@@ -459,5 +517,78 @@ func TestListActiveWithTasks(t *testing.T) {
 	}
 	if results[0].Task.ID != "t1" {
 		t.Errorf("expected task t1, got %s", results[0].Task.ID)
+	}
+}
+
+func TestWorkspaceRepo_CRUD(t *testing.T) {
+	repos := setupRepoTestDB(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	repos.Runs.Create(&domain.Run{ID: "r1", ProjectID: "p1", Title: "test", Status: domain.RunStatusPending, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	repos.Tasks.Create(&domain.Task{ID: "t1", RunID: "r1", TaskType: "code", AttemptNo: 1, Status: domain.TaskStatusQueued, Priority: domain.PriorityNormal, QueueStatus: "queued", ResourceClass: domain.ResourceClassLight, Preemptible: true, RestartPolicy: "never", Title: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	w := &domain.Workspace{ID: "ws1", TaskID: "t1", ProjectID: "p1", Path: "/data/workspaces/task-t1", Branch: "feature/test", CommitSHA: "abc123", SizeBytes: 1024000, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if err := repos.Workspaces.Create(w); err != nil {
+		t.Fatalf("create workspace: %v", err)
+	}
+
+	got, _ := repos.Workspaces.GetByTaskID("t1")
+	if got.Path != "/data/workspaces/task-t1" {
+		t.Errorf("expected path, got %s", got.Path)
+	}
+
+	none, _ := repos.Workspaces.GetByTaskID("nonexistent")
+	if none != nil {
+		t.Error("expected nil for nonexistent workspace")
+	}
+
+	list, _ := repos.Workspaces.ListActive()
+	if len(list) != 1 {
+		t.Errorf("expected 1 workspace, got %d", len(list))
+	}
+}
+
+func TestCommandLogRepo_CRUD(t *testing.T) {
+	repos := setupRepoTestDB(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	repos.Runs.Create(&domain.Run{ID: "r1", ProjectID: "p1", Title: "test", Status: domain.RunStatusPending, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	repos.Tasks.Create(&domain.Task{ID: "t1", RunID: "r1", TaskType: "code", AttemptNo: 1, Status: domain.TaskStatusQueued, Priority: domain.PriorityNormal, QueueStatus: "queued", ResourceClass: domain.ResourceClassLight, Preemptible: true, RestartPolicy: "never", Title: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	agentID := "a1"
+	exitCode := 0
+	cmd := &domain.CommandLog{ID: "cl1", TaskID: "t1", AgentID: &agentID, Command: "make build", ExitCode: &exitCode, Output: "Build completed", Duration: 15000, CreatedAt: time.Now()}
+	if err := repos.CommandLogs.Create(cmd); err != nil {
+		t.Fatalf("create command log: %v", err)
+	}
+
+	cmd2 := &domain.CommandLog{ID: "cl2", TaskID: "t1", Command: "echo hello", Duration: 500, CreatedAt: time.Now()}
+	if err := repos.CommandLogs.Create(cmd2); err != nil {
+		t.Fatalf("create command log with nil fields: %v", err)
+	}
+}
+
+func TestAgentSpecRepo_CRUD(t *testing.T) {
+	repos := setupRepoTestDB(t)
+
+	as := &domain.AgentSpec{ID: "as1", Name: "Claude Code Agent", AgentKind: "claude-code", SupportedTaskTypes: "planner,coder,tester", DefaultCommand: "claude", MaxConcurrency: 2, ResourceWeight: 1.5, HeartbeatMode: "periodic", OutputParser: "claude-code"}
+	if err := repos.AgentSpecs.Create(as); err != nil {
+		t.Fatalf("create agent spec: %v", err)
+	}
+
+	got, _ := repos.AgentSpecs.GetByID("as1")
+	if got.Name != "Claude Code Agent" {
+		t.Errorf("expected 'Claude Code Agent', got %s", got.Name)
+	}
+	if got.MaxConcurrency != 2 {
+		t.Errorf("expected max_concurrency 2, got %d", got.MaxConcurrency)
+	}
+
+	none, _ := repos.AgentSpecs.GetByID("nonexistent")
+	if none != nil {
+		t.Error("expected nil for nonexistent agent spec")
+	}
+
+	list, _ := repos.AgentSpecs.List()
+	if len(list) != 1 {
+		t.Errorf("expected 1 agent spec, got %d", len(list))
 	}
 }

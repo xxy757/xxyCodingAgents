@@ -80,6 +80,24 @@ func TestSetDefaults(t *testing.T) {
 	if cfg.Runtime.CheckpointRoot != "./data/checkpoints" {
 		t.Errorf("expected CheckpointRoot ./data/checkpoints, got %s", cfg.Runtime.CheckpointRoot)
 	}
+	if cfg.AgentRuntime.BaseDir == "" {
+		t.Error("expected AgentRuntime.BaseDir to be set")
+	}
+	if !filepath.IsAbs(cfg.AgentRuntime.BaseDir) {
+		t.Errorf("expected AgentRuntime.BaseDir to be absolute, got %s", cfg.AgentRuntime.BaseDir)
+	}
+	if cfg.AgentRuntime.PromptTemplateDir == "" {
+		t.Error("expected AgentRuntime.PromptTemplateDir to be set")
+	}
+	if !filepath.IsAbs(cfg.AgentRuntime.PromptTemplateDir) {
+		t.Errorf("expected AgentRuntime.PromptTemplateDir to be absolute, got %s", cfg.AgentRuntime.PromptTemplateDir)
+	}
+	if cfg.AgentRuntime.LearningsRootDir == "" {
+		t.Error("expected AgentRuntime.LearningsRootDir to be set")
+	}
+	if !filepath.IsAbs(cfg.AgentRuntime.LearningsRootDir) {
+		t.Errorf("expected AgentRuntime.LearningsRootDir to be absolute, got %s", cfg.AgentRuntime.LearningsRootDir)
+	}
 }
 
 func TestSetDefaultsDoesNotOverrideExisting(t *testing.T) {
@@ -202,10 +220,18 @@ func TestApplyEnvOverrides(t *testing.T) {
 	os.Setenv("AI_DEV_HTTP_ADDR", ":7070")
 	os.Setenv("AI_DEV_SQLITE_PATH", "/tmp/test.db")
 	os.Setenv("AI_DEV_WORKSPACE_ROOT", "/tmp/ws")
+	os.Setenv("AI_DEV_AGENT_RUNTIME_BASE_DIR", "/tmp/agent-runtime")
+	os.Setenv("AI_DEV_BROWSE_CLI_PATH", "/tmp/bin/browse")
+	os.Setenv("AI_DEV_PROMPT_TEMPLATE_DIR", "/tmp/prompts")
+	os.Setenv("AI_DEV_LEARNINGS_ROOT_DIR", "/tmp/learnings")
 	defer func() {
 		os.Unsetenv("AI_DEV_HTTP_ADDR")
 		os.Unsetenv("AI_DEV_SQLITE_PATH")
 		os.Unsetenv("AI_DEV_WORKSPACE_ROOT")
+		os.Unsetenv("AI_DEV_AGENT_RUNTIME_BASE_DIR")
+		os.Unsetenv("AI_DEV_BROWSE_CLI_PATH")
+		os.Unsetenv("AI_DEV_PROMPT_TEMPLATE_DIR")
+		os.Unsetenv("AI_DEV_LEARNINGS_ROOT_DIR")
 	}()
 
 	cfg.applyEnvOverrides()
@@ -218,6 +244,18 @@ func TestApplyEnvOverrides(t *testing.T) {
 	}
 	if cfg.Runtime.WorkspaceRoot != "/tmp/ws" {
 		t.Errorf("expected /tmp/ws, got %s", cfg.Runtime.WorkspaceRoot)
+	}
+	if cfg.AgentRuntime.BaseDir != "/tmp/agent-runtime" {
+		t.Errorf("expected /tmp/agent-runtime, got %s", cfg.AgentRuntime.BaseDir)
+	}
+	if cfg.AgentRuntime.BrowseCLIPath != "/tmp/bin/browse" {
+		t.Errorf("expected /tmp/bin/browse, got %s", cfg.AgentRuntime.BrowseCLIPath)
+	}
+	if cfg.AgentRuntime.PromptTemplateDir != "/tmp/prompts" {
+		t.Errorf("expected /tmp/prompts, got %s", cfg.AgentRuntime.PromptTemplateDir)
+	}
+	if cfg.AgentRuntime.LearningsRootDir != "/tmp/learnings" {
+		t.Errorf("expected /tmp/learnings, got %s", cfg.AgentRuntime.LearningsRootDir)
 	}
 }
 

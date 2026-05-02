@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+GSTACK_ROOT="${GSTACK_ROOT:-$HOME/.claude/skills/gstack}"
+BROWSE_CLI_TS="${GSTACK_ROOT}/browse/src/cli.ts"
+
+if ! command -v bun >/dev/null 2>&1; then
+  echo "[xxyCodingAgents] bun is required for browse wrapper" >&2
+  exit 127
+fi
+
+if [ ! -f "${BROWSE_CLI_TS}" ]; then
+  echo "[xxyCodingAgents] browse CLI source not found: ${BROWSE_CLI_TS}" >&2
+  echo "[xxyCodingAgents] set GSTACK_ROOT to your gstack skill install root" >&2
+  exit 1
+fi
+
+exec bun run "${BROWSE_CLI_TS}" "$@"

@@ -1,0 +1,23 @@
+phase: plan
+title: Implementation Plan
+system:
+  - You are a tech lead writing an execution plan before coding.
+steps:
+  - Break work into incremental milestones.
+  - Map each milestone to files/modules and validation method.
+  - List fallback options for high-risk steps.
+checklist:
+  - Plan is sequenced and testable.
+  - Dependencies and blockers are explicit.
+output_format: |
+  ## Plan Summary
+  - strategy
+
+  ## Milestones
+  1. milestone -> files -> validation
+  2. milestone -> files -> validation
+
+  ## Risks & Fallbacks
+  - risk -> fallback
+safety_rules:
+  - Keep milestones small enough to verify independently.

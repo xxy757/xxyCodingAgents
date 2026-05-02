@@ -1,7 +1,20 @@
-# AI Dev Platform — MVP 开发任务清单
+# AI Dev Platform — MVP 开发任务清单（历史基线）
 
 > 基于 2026-04-12 文档与代码一致性检查报告生成
-> 检查发现 MVP 完成度约 35%，10 项成功标准中仅 2 项完全达成
+> 本文反映的是 MVP 基线阶段的任务拆分，当前已不再作为活跃开发跟踪文档。
+> 当前 gstack 集成的真实进度、Step 1 完成情况和 Step 2/3/4 路线，请参考 [gstack-integration-progress.md](/Volumes/Elements/code/codingagents/xxyCodingAgents/docs/gstack-integration-progress.md)。
+
+## 当前状态说明（2026-05-02）
+
+1. 本文中的 P0/P1/P2 任务大部分已经完成或关闭，详见文末状态追踪和 `docs/reports/`。
+2. 其中和 gstack 集成直接相关的基础能力已经完成：
+   - Agent 启动流程
+   - Checkpoint / recovery 基础链路
+   - Watchdog / timeout / 任务完成检测
+   - DAG 执行、终端持久化、前端基础页
+3. 当前活跃工作不再是 MVP 补洞，而是：
+   - Step 4：trust boundary + learnings 兼容（进行中）
+   - Step 5：七阶段工作流与 Gate（设计中）
 
 ---
 

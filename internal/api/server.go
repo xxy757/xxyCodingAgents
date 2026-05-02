@@ -12,31 +12,34 @@ import (
 
 	"github.com/xxy757/xxyCodingAgents/internal/config"
 	"github.com/xxy757/xxyCodingAgents/internal/orchestrator"
+	agentruntime "github.com/xxy757/xxyCodingAgents/internal/runtime"
 	"github.com/xxy757/xxyCodingAgents/internal/storage"
 	"github.com/xxy757/xxyCodingAgents/internal/terminal"
 )
 
 // Server 是 API 服务器，聚合了配置、数据库、路由和各类管理器。
 type Server struct {
-	cfg          *config.Config          // 应用配置
-	db           *storage.DB             // 数据库连接
-	repos        *storage.Repos          // 数据仓库集合
-	mux          *http.ServeMux          // HTTP 路由多路复用器
-	hub          *WebSocketHub           // WebSocket 广播中心
-	orch         *orchestrator.Orchestrator // 编排器
-	termMgr      *terminal.Manager       // 终端会话管理器
+	cfg             *config.Config                    // 应用配置
+	db              *storage.DB                       // 数据库连接
+	repos           *storage.Repos                    // 数据仓库集合
+	mux             *http.ServeMux                    // HTTP 路由多路复用器
+	hub             *WebSocketHub                     // WebSocket 广播中心
+	orch            *orchestrator.Orchestrator        // 编排器
+	termMgr         *terminal.Manager                 // 终端会话管理器
+	runtimeRegistry *agentruntime.AdapterRegistry     // Agent 运行时注册表
 }
 
 // NewServer 创建并初始化 API 服务器，注册所有路由。
-func NewServer(cfg *config.Config, db *storage.DB, repos *storage.Repos, orch *orchestrator.Orchestrator, termMgr *terminal.Manager) *Server {
+func NewServer(cfg *config.Config, db *storage.DB, repos *storage.Repos, orch *orchestrator.Orchestrator, termMgr *terminal.Manager, registry *agentruntime.AdapterRegistry) *Server {
 	s := &Server{
-		cfg:     cfg,
-		db:      db,
-		repos:   repos,
-		mux:     http.NewServeMux(),
-		hub:     NewWebSocketHub(),
-		orch:    orch,
-		termMgr: termMgr,
+		cfg:             cfg,
+		db:              db,
+		repos:           repos,
+		mux:             http.NewServeMux(),
+		hub:             NewWebSocketHub(),
+		orch:            orch,
+		termMgr:         termMgr,
+		runtimeRegistry: registry,
 	}
 	s.setupRoutes()
 	return s

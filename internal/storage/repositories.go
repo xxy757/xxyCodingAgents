@@ -242,6 +242,24 @@ func (r *TaskRepo) UpdateStatus(id string, status domain.TaskStatus) error {
 	return err
 }
 
+// MarkRunning 更新任务状态为 running，并持久化 started_at。
+func (r *TaskRepo) MarkRunning(id string, startedAt time.Time) error {
+	_, err := r.db.Exec(
+		"UPDATE tasks SET status = ?, started_at = ?, updated_at = ? WHERE id = ?",
+		domain.TaskStatusRunning, startedAt, time.Now(), id,
+	)
+	return err
+}
+
+// MarkCompleted 更新任务状态为 completed，并持久化 completed_at。
+func (r *TaskRepo) MarkCompleted(id string, completedAt time.Time) error {
+	_, err := r.db.Exec(
+		"UPDATE tasks SET status = ?, completed_at = ?, updated_at = ? WHERE id = ?",
+		domain.TaskStatusCompleted, completedAt, time.Now(), id,
+	)
+	return err
+}
+
 // UpdateQueueStatus 更新任务的队列状态。
 func (r *TaskRepo) UpdateQueueStatus(id string, queueStatus string) error {
 	_, err := r.db.Exec(
@@ -329,6 +347,15 @@ func (r *AgentInstanceRepo) UpdatePID(id string, pid int) error {
 	)
 	return err
 }
+	// UpdateLastOutputAt 更新 Agent 的最后输出时间。
+	func (r *AgentInstanceRepo) UpdateLastOutputAt(id string) error {
+		now := time.Now()
+		_, err := r.db.Exec(
+			"UPDATE agent_instances SET last_output_at = ?, updated_at = ? WHERE id = ?", now, now, id,
+		)
+		return err
+	}
+
 
 // UpdateCheckpointID 更新 Agent 的最新检查点引用。
 func (r *AgentInstanceRepo) UpdateCheckpointID(id string, checkpointID string) error {
@@ -767,6 +794,18 @@ func (r *AgentSpecRepo) GetByID(id string) (*domain.AgentSpec, error) {
 	return as, err
 }
 
+
+	// GetByKind 根据 agent_kind 查询 Agent 规格，未找到时返回 nil。
+	func (r *AgentSpecRepo) GetByKind(kind string) (*domain.AgentSpec, error) {
+		as := &domain.AgentSpec{}
+		err := r.db.QueryRow(
+			"SELECT id, name, agent_kind, supported_task_types, default_command, max_concurrency, resource_weight, heartbeat_mode, output_parser FROM agent_specs WHERE agent_kind = ?", kind,
+		).Scan(&as.ID, &as.Name, &as.AgentKind, &as.SupportedTaskTypes, &as.DefaultCommand, &as.MaxConcurrency, &as.ResourceWeight, &as.HeartbeatMode, &as.OutputParser)
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return as, err
+	}
 // List 查询所有 Agent 规格。
 func (r *AgentSpecRepo) List() ([]*domain.AgentSpec, error) {
 	rows, err := r.db.Query("SELECT id, name, agent_kind, supported_task_types, default_command, max_concurrency, resource_weight, heartbeat_mode, output_parser FROM agent_specs")

@@ -1,26 +1,30 @@
 // Package orchestrator 实现运行编排器，负责任务运行的创建、工作流实例化、
-// 任务完成/失败处理以及依赖任务解除阻塞等核心编排逻辑。
+// 任务完成/失败处理、工作区克隆以及依赖任务解除阻塞等核心编排逻辑。
 package orchestrator
 
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/xxy757/xxyCodingAgents/internal/domain"
 	"github.com/xxy757/xxyCodingAgents/internal/storage"
+	"github.com/xxy757/xxyCodingAgents/internal/workspace"
 )
 
 // Orchestrator 是运行编排器，协调运行（Run）和任务（Task）的生命周期。
 type Orchestrator struct {
-	repos *storage.Repos
+	repos      *storage.Repos
+	gitManager *workspace.GitManager
 }
 
 // NewOrchestrator 创建编排器实例。
-func NewOrchestrator(repos *storage.Repos) *Orchestrator {
-	return &Orchestrator{repos: repos}
+func NewOrchestrator(repos *storage.Repos, gitMgr *workspace.GitManager) *Orchestrator {
+	return &Orchestrator{repos: repos, gitManager: gitMgr}
 }
 
 // CreateRun 创建一个新的运行实例。如果指定了工作流模板，会自动实例化其中的任务。
@@ -106,6 +110,21 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		}
 	}
 
+	// 为运行创建工作区（克隆项目仓库）
+	var workspacePath string
+	project, _ := o.repos.Projects.GetByID(run.ProjectID)
+	if project != nil && project.RepoURL != "" && o.gitManager != nil {
+		wsDir, err := o.gitManager.CreateWorkspace(ctx, run.ID)
+		if err == nil {
+			if err := o.gitManager.Clone(ctx, project.RepoURL, wsDir); err != nil {
+				slog.Warn("clone repo for run, continuing with empty workspace", "run_id", run.ID, "repo", project.RepoURL, "error", err)
+			} else {
+				workspacePath = wsDir
+				slog.Info("workspace cloned for run", "run_id", run.ID, "path", wsDir)
+			}
+		}
+	}
+
 	// 为每个节点创建任务实例
 	nodeTaskMap := make(map[string]string)
 	for _, node := range nodes {
@@ -124,6 +143,24 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 			initialStatus = domain.TaskStatusBlocked
 		}
 
+		// 收集上游任务的输出作为当前任务的输入
+		var inputData string
+		if hasDeps {
+			var upstreamOutputs []string
+			for _, depNodeID := range dependencyMap[node.ID] {
+				if depTaskID, ok := nodeTaskMap[depNodeID]; ok {
+					depTask, err := o.repos.Tasks.GetByID(depTaskID)
+					if err == nil && depTask != nil && depTask.OutputData != "" {
+						upstreamOutputs = append(upstreamOutputs,
+							fmt.Sprintf(`{"from":"%s","output":%s}`, depNodeID, depTask.OutputData))
+					}
+				}
+			}
+			if len(upstreamOutputs) > 0 {
+				inputData = "[" + strings.Join(upstreamOutputs, ",") + "]"
+			}
+		}
+
 		task := &domain.Task{
 			ID:            uuid.New().String(),
 			RunID:         run.ID,
@@ -137,6 +174,8 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 			Preemptible:   true,
 			RestartPolicy: "never",
 			Title:         node.Label,
+			InputData:     inputData,
+			WorkspacePath: workspacePath,
 			CreatedAt:     time.Now(),
 			UpdatedAt:     time.Now(),
 		}
@@ -145,7 +184,7 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		}
 
 		nodeTaskMap[node.ID] = task.ID
-		slog.Info("task created from template", "run_id", run.ID, "task_id", task.ID, "label", node.Label, "status", initialStatus)
+		slog.Info("task created from template", "run_id", run.ID, "task_id", task.ID, "label", node.Label, "status", initialStatus, "workspace", workspacePath)
 	}
 
 	// 所有任务创建后，将运行状态更新为 running
@@ -268,7 +307,7 @@ func (o *Orchestrator) CompleteTask(ctx context.Context, taskID string) error {
 	now := time.Now()
 	task.Status = domain.TaskStatusCompleted
 	task.CompletedAt = &now
-	if err := o.repos.Tasks.UpdateStatus(taskID, domain.TaskStatusCompleted); err != nil {
+	if err := o.repos.Tasks.MarkCompleted(taskID, now); err != nil {
 		return err
 	}
 

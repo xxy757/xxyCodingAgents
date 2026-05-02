@@ -19,6 +19,7 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/scheduler"
 	"github.com/xxy757/xxyCodingAgents/internal/storage"
 	"github.com/xxy757/xxyCodingAgents/internal/terminal"
+	"github.com/xxy757/xxyCodingAgents/internal/workspace"
 )
 
 func main() {
@@ -65,8 +66,14 @@ func main() {
 	// 初始化 tmux 终端会话管理器
 	termMgr := terminal.NewManager()
 
+	// 初始化 Agent 运行时适配器注册表
+	adapterRegistry := agentruntime.NewAdapterRegistry()
+
+	// 初始化 Git 工作区管理器
+	gitMgr := workspace.NewGitManager(cfg.Runtime.WorkspaceRoot)
+
 	// 初始化编排器，负责任务运行的生命周期管理
-	orch := orchestrator.NewOrchestrator(repos)
+	orch := orchestrator.NewOrchestrator(repos, gitMgr)
 
 	// 启动时运行协调器，修复上次异常退出导致的 Agent 状态不一致
 	reconciler := scheduler.NewReconciler(repos, termMgr)
@@ -76,15 +83,15 @@ func main() {
 	}
 
 	// 启动调度器，定时执行任务调度、资源监控和清理
-	sched := scheduler.NewScheduler(cfg, repos, agentruntime.NewGenericShellAdapter(), termMgr)
+	sched := scheduler.NewScheduler(cfg, repos, adapterRegistry, termMgr, orch)
 	go sched.Run(ctx)
 
 	// 启动看门狗，定期检查 Agent 存活状态
-	watchdog := scheduler.NewWatchdog(cfg, repos, agentruntime.NewGenericShellAdapter(), termMgr)
+	watchdog := scheduler.NewWatchdog(cfg, repos, adapterRegistry, termMgr, sched)
 	go watchdog.Run(ctx)
 
 	// 创建 HTTP API 服务器
-	server := api.NewServer(cfg, db, repos, orch, termMgr)
+	server := api.NewServer(cfg, db, repos, orch, termMgr, adapterRegistry)
 
 	// 监听系统信号，用于优雅关闭
 	sigCh := make(chan os.Signal, 1)

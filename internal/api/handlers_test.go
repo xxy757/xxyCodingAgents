@@ -12,6 +12,7 @@ import (
 	"github.com/xxy757/xxyCodingAgents/internal/config"
 	"github.com/xxy757/xxyCodingAgents/internal/domain"
 	"github.com/xxy757/xxyCodingAgents/internal/orchestrator"
+	agentruntime "github.com/xxy757/xxyCodingAgents/internal/runtime"
 	"github.com/xxy757/xxyCodingAgents/internal/storage"
 	"github.com/xxy757/xxyCodingAgents/internal/terminal"
 )
@@ -72,9 +73,10 @@ func setupAPITest(t *testing.T) (*Server, *storage.Repos, *orchestrator.Orchestr
 	}
 
 	repos := storage.NewRepos(db)
-	orch := orchestrator.NewOrchestrator(repos)
+	orch := orchestrator.NewOrchestrator(repos, nil)
 	tm := terminal.NewManager()
-	srv := NewServer(cfg, db, repos, orch, tm)
+	registry := agentruntime.NewAdapterRegistry()
+	srv := NewServer(cfg, db, repos, orch, tm, registry)
 	return srv, repos, orch
 }
 

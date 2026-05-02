@@ -20,7 +20,7 @@ func setupOrchestratorTest(t *testing.T) (*Orchestrator, *storage.Repos) {
 		t.Fatalf("migrate: %v", err)
 	}
 	repos := storage.NewRepos(db)
-	return NewOrchestrator(repos), repos
+	return NewOrchestrator(repos, nil), repos
 }
 
 func seedProjectAndTemplate(t *testing.T, repos *storage.Repos) (string, string) {
@@ -35,11 +35,11 @@ func seedProjectAndTemplate(t *testing.T, repos *storage.Repos) (string, string)
 	})
 
 	wt := &domain.WorkflowTemplate{
-		ID:          "wt1",
-		Name:        "ci",
-		NodesJSON:   `[{"id":"n1","task_spec_id":"ts-build","label":"build"},{"id":"n2","task_spec_id":"ts-test","label":"test"}]`,
-		EdgesJSON:   `[{"from":"n1","to":"n2"}]`,
-		OnFailure:   "abort",
+		ID:        "wt1",
+		Name:      "ci",
+		NodesJSON: `[{"id":"n1","task_spec_id":"ts-build","label":"build"},{"id":"n2","task_spec_id":"ts-test","label":"test"}]`,
+		EdgesJSON: `[{"from":"n1","to":"n2"}]`,
+		OnFailure: "abort",
 	}
 	repos.WorkflowTemplates.Create(wt)
 
@@ -112,6 +112,9 @@ func TestCompleteTask(t *testing.T) {
 	gotTask, _ := repos.Tasks.GetByID(buildTask.ID)
 	if gotTask.Status != domain.TaskStatusCompleted {
 		t.Errorf("expected completed, got %s", gotTask.Status)
+	}
+	if gotTask.CompletedAt == nil {
+		t.Error("expected completed_at to be persisted")
 	}
 
 	tasksAfter, _ := repos.Tasks.ListByRun(run.ID)

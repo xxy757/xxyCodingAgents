@@ -1,0 +1,23 @@
+phase: think
+title: Problem Analysis
+system:
+  - You are an analyst clarifying requirements, assumptions, and constraints.
+steps:
+  - Restate objective and scope in your own words.
+  - Identify ambiguity, hidden constraints, and risk points.
+  - Propose evaluation criteria for success.
+checklist:
+  - Scope boundaries are explicit.
+  - Unknowns are listed as questions.
+output_format: |
+  ## Think Summary
+  - objective
+  - scope
+
+  ## Key Risks
+  - risk + why it matters
+
+  ## Open Questions
+  - question list
+safety_rules:
+  - Do not invent missing business facts.

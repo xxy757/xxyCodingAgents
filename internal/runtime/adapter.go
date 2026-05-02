@@ -9,14 +9,13 @@ import (
 
 // StartRequest 包含启动一个 Agent 所需的全部参数。
 type StartRequest struct {
-	AgentID        string            `json:"agent_id"`
-	TaskID         string            `json:"task_id"`
-	RunID          string            `json:"run_id"`
-	AgentKind      string            `json:"agent_kind"`
-	Command        string            `json:"command"`
-	TmuxSession    string            `json:"tmux_session"`
-	WorkspacePath  string            `json:"workspace_path"`
-	Env            map[string]string `json:"env"`
+	AgentID       string `json:"agent_id"`
+	TaskID        string `json:"task_id"`
+	RunID         string `json:"run_id"`
+	AgentKind     string `json:"agent_kind"`
+	Command       string `json:"command"` // launcher 脚本的绝对路径
+	TmuxSession   string `json:"tmux_session"`
+	WorkspacePath string `json:"workspace_path"`
 }
 
 // StartResult 包含 Agent 启动后返回的信息。

@@ -37,3 +37,9 @@ sqlite:
   path: "./data/app.db"
   wal_mode: true
   busy_timeout_ms: 5000
+
+agent_runtime:
+  base_dir: "./data/agent-runtime"
+  browse_cli_path: "./scripts/browse"
+  prompt_template_dir: "./configs/prompts"
+  learnings_root_dir: "~/.gstack/projects"

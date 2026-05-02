@@ -1,4 +1,16 @@
-# AI Dev Platform — MVP 开发计划
+# AI Dev Platform — MVP 开发计划（基线文档）
+
+> 状态更新：2026-05-02
+> 本文记录的是 MVP 基线开发计划，不再承担 gstack 集成的实施跟踪职责。
+> 当前活跃实施路线、Step 1/2/3/4 进度、文件落点和验收标准，请参考 [gstack-integration-progress.md](/Volumes/Elements/code/codingagents/xxyCodingAgents/docs/gstack-integration-progress.md)。
+>
+> 当前实现快照：
+> - 核心运行时闭环已建立：scheduler / watchdog / orchestrator / runtime adapter / tmux / workspace
+> - gstack 集成 Step 1 已完成：prompt file + launcher script + recovery/timeout/cleanup 闭环
+> - gstack 集成 Step 2 已完成：workspace 级 browse CLI + wrapper + smoke 脚本已落地（scheduler 全链路需 tmux 环境复核）
+> - gstack 集成 Step 3 已完成：PromptEngine + phase YAML + scheduler 注入链已落地
+> - gstack 集成 Step 4 进行中：已完成 learnings JSONL 检索注入 + QA trust-boundary + 失败链路自动写入 + canary 泄漏检测
+> - 当前后续阶段：Step 4 收尾（检索降噪/可视化）与 Step 5（Gate 工作流）
 
 ## 阶段一：项目基础搭建
 
