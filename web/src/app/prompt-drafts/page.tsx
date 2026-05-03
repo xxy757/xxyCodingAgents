@@ -180,7 +180,7 @@ function PromptDraftsContent() {
           <button
             onClick={handleGenerate}
             disabled={loading || !originalInput.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
           >
             {loading ? "生成中..." : "生成草稿"}
           </button>
@@ -266,13 +266,13 @@ function PromptDraftsContent() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  <span className={`px-2 py-1 text-xs rounded ${draftStatusColors[draft.status] || "bg-gray-100"}`}>
+                  <span className={`px-2 py-1.5 text-xs rounded ${draftStatusColors[draft.status] || "bg-gray-100"}`}>
                     {draft.status === "draft" ? "草稿" : draft.status === "confirmed" ? "已确认" : "已发送"}
                   </span>
                   {draft.status === "draft" && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleSend(draft.id); }}
-                      className="px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700"
+                      className="px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:outline-none"
                     >
                       发送
                     </button>
