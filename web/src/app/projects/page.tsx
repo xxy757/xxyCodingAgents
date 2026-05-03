@@ -57,46 +57,51 @@ export default function ProjectsPage() {
         <h1 className="text-2xl font-bold">项目管理</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+          className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
         >
           新建项目
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">
+          操作失败：{error}
+        </div>
       )}
 
       {/* 新建项目表单 */}
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
+        <form onSubmit={handleCreate} className="mb-6 p-4 bg-neutral-50 rounded-lg border border-neutral-200 space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">项目名称</label>
+            <label htmlFor="project-name" className="block text-sm font-medium mb-1">项目名称</label>
             <input
+              id="project-name"
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
               placeholder="输入项目名称"
               required
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">仓库 URL</label>
+            <label htmlFor="project-repo" className="block text-sm font-medium mb-1">仓库 URL</label>
             <input
+              id="project-repo"
               type="text"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
               placeholder="https://github.com/..."
             />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">描述</label>
+            <label htmlFor="project-desc" className="block text-sm font-medium mb-1">描述</label>
             <textarea
+              id="project-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
               rows={3}
               placeholder="项目描述"
             />
@@ -104,7 +109,7 @@ export default function ProjectsPage() {
           <button
             type="submit"
             disabled={creating}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:outline-none"
+            className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
           >
             {creating ? "创建中..." : "创建"}
           </button>
@@ -113,30 +118,36 @@ export default function ProjectsPage() {
 
       {/* 项目列表表格 */}
       {loading ? (
-        <div className="text-gray-500">加载中...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="skeleton h-12 w-full" />
+          ))}
+        </div>
       ) : projects.length === 0 ? (
-        <p className="text-gray-500">暂无项目</p>
+        <p className="text-neutral-500">暂无项目</p>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b text-left text-sm text-gray-600">
-              <th className="pb-2">ID</th>
-              <th className="pb-2">名称</th>
-              <th className="pb-2">仓库</th>
-              <th className="pb-2">创建时间</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.id} className="border-b hover:bg-gray-50">
-                <td className="py-2 text-sm font-mono">{p.id.slice(0, 8)}</td>
-                <td className="py-2 text-sm font-medium">{p.name}</td>
-                <td className="py-2 text-sm text-gray-500">{p.repo_url || "-"}</td>
-                <td className="py-2 text-sm">{new Date(p.created_at).toLocaleString()}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-sm text-neutral-600">
+                <th className="pb-2">ID</th>
+                <th className="pb-2">名称</th>
+                <th className="pb-2">仓库</th>
+                <th className="pb-2">创建时间</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {projects.map((p) => (
+                <tr key={p.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                  <td className="py-2 text-sm font-mono">{p.id.slice(0, 8)}</td>
+                  <td className="py-2 text-sm font-medium">{p.name}</td>
+                  <td className="py-2 text-sm text-neutral-500">{p.repo_url || "-"}</td>
+                  <td className="py-2 text-sm">{new Date(p.created_at).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

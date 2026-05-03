@@ -29,7 +29,7 @@ const TASK_TYPES = [
 // PromptDraftsPageWrapper 包装 Suspense 边界以支持 useSearchParams
 export default function PromptDraftsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-center text-gray-400">加载中...</div>}>
+    <Suspense fallback={<div className="p-6 text-center text-neutral-400">加载中...</div>}>
       <PromptDraftsContent />
     </Suspense>
   );
@@ -115,7 +115,6 @@ function PromptDraftsContent() {
       setDrafts(drafts.map((d) => (d.id === draftId ? { ...d, status: "sent" } : d)));
       setEditingDraft(null);
       setSuccess(`已发送！Run: ${result.run_id}`);
-      // 3 秒后跳转到 runs 页面
       setTimeout(() => router.push("/runs"), 2000);
     } catch (e: any) {
       setError(e.message);
@@ -137,19 +136,24 @@ function PromptDraftsContent() {
 
       {/* 错误/成功提示 */}
       {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded border border-red-200">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 text-error-700 rounded-md border border-error-500">
+          操作失败：{error}
+        </div>
       )}
       {success && (
-        <div className="mb-4 p-3 bg-green-50 text-green-700 rounded border border-green-200">{success}</div>
+        <div role="status" className="mb-4 p-3 bg-success-50 text-success-700 rounded-md border border-success-500">
+          {success}
+        </div>
       )}
 
       {/* 输入区 */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6">
+      <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-6">
         <div className="flex gap-4 mb-3">
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            className="border rounded px-3 py-2 text-sm flex-shrink-0"
+            aria-label="选择项目"
+            className="border border-neutral-300 rounded-md px-3 py-2 text-sm flex-shrink-0 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -160,7 +164,8 @@ function PromptDraftsContent() {
           <select
             value={taskType}
             onChange={(e) => setTaskType(e.target.value)}
-            className="border rounded px-3 py-2 text-sm flex-shrink-0"
+            aria-label="任务类型"
+            className="border border-neutral-300 rounded-md px-3 py-2 text-sm flex-shrink-0 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
           >
             {TASK_TYPES.map((t) => (
               <option key={t.value} value={t.value}>
@@ -173,14 +178,15 @@ function PromptDraftsContent() {
           value={originalInput}
           onChange={(e) => setOriginalInput(e.target.value)}
           placeholder="描述你想要完成的任务..."
-          className="w-full border rounded p-3 text-sm resize-y min-h-[80px]"
+          aria-label="任务描述"
+          className="w-full border border-neutral-300 rounded-md p-3 text-sm resize-y min-h-[80px] focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
           rows={3}
         />
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex gap-2 flex-wrap">
           <button
             onClick={handleGenerate}
             disabled={loading || !originalInput.trim()}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
           >
             {loading ? "生成中..." : "生成草稿"}
           </button>
@@ -189,8 +195,11 @@ function PromptDraftsContent() {
             <button
               key={t}
               onClick={() => { setTaskType(t); }}
-              className={`px-3 py-2 text-xs rounded border ${
-                taskType === t ? "bg-blue-100 border-blue-300 text-blue-700" : "bg-gray-50 hover:bg-gray-100"
+              aria-label={TASK_TYPES.find((tt) => tt.value === t)?.label}
+              className={`px-3 py-2 text-xs rounded-md border transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none ${
+                taskType === t
+                  ? "bg-primary-50 border-primary-300 text-primary-700"
+                  : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100"
               }`}
             >
               {TASK_TYPES.find((tt) => tt.value === t)?.label}
@@ -201,40 +210,41 @@ function PromptDraftsContent() {
 
       {/* 编辑区 */}
       {editingDraft && (
-        <div className="bg-white rounded-lg shadow p-4 mb-6 border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-6 border-l-4 border-l-primary-500">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">编辑草稿</h2>
-            <span className={`px-2 py-1 text-xs rounded ${draftStatusColors[editingDraft.status] || "bg-gray-100"}`}>
-              {editingDraft.status}
+            <span className={`px-2 py-1 text-xs rounded-full ${draftStatusColors[editingDraft.status] || "bg-neutral-100"}`}>
+              {editingDraft.status === "draft" ? "草稿" : editingDraft.status === "confirmed" ? "已确认" : "已发送"}
             </span>
           </div>
-          <div className="text-xs text-gray-500 mb-2">
+          <div className="text-xs text-neutral-500 mb-2">
             任务类型: {editingDraft.task_type} | 原始输入: {editingDraft.original_input.slice(0, 60)}...
           </div>
           <textarea
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
-            className="w-full border rounded p-3 text-sm font-mono resize-y min-h-[200px]"
+            aria-label="编辑草稿内容"
+            className="w-full border border-neutral-300 rounded-md p-3 text-sm font-mono resize-y min-h-[200px] focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
             rows={10}
           />
           <div className="mt-3 flex gap-2">
             <button
               onClick={handleSave}
               disabled={loading}
-              className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 disabled:opacity-50 text-sm"
+              className="px-4 py-2 bg-neutral-600 text-white rounded-md hover:bg-neutral-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:outline-none"
             >
               保存
             </button>
             <button
               onClick={() => handleSend(editingDraft.id)}
               disabled={loading}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 text-sm"
+              className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
             >
               确认发送
             </button>
             <button
               onClick={() => setEditingDraft(null)}
-              className="px-4 py-2 border rounded hover:bg-gray-50 text-sm"
+              className="px-4 py-2 border border-neutral-300 rounded-md hover:bg-neutral-50 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
             >
               取消
             </button>
@@ -243,36 +253,40 @@ function PromptDraftsContent() {
       )}
 
       {/* 草稿历史列表 */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-4 py-3 border-b">
+      <div className="bg-white rounded-lg border border-neutral-200">
+        <div className="px-4 py-3 border-b border-neutral-200">
           <h2 className="font-semibold">草稿历史</h2>
         </div>
         {drafts.length === 0 ? (
-          <div className="p-8 text-center text-gray-400">暂无草稿</div>
+          <div className="p-8 text-center text-neutral-400">暂无草稿</div>
         ) : (
-          <div className="divide-y">
+          <div className="divide-y divide-neutral-100">
             {drafts.map((draft) => (
               <div
                 key={draft.id}
-                className={`px-4 py-3 flex items-center justify-between ${
-                  draft.status === "draft" ? "hover:bg-gray-50 cursor-pointer" : ""
+                className={`px-4 py-3 flex items-center justify-between transition-colors ${
+                  draft.status === "draft" ? "hover:bg-neutral-50 cursor-pointer" : "opacity-60"
                 }`}
                 onClick={() => handleSelectDraft(draft)}
+                role={draft.status === "draft" ? "button" : undefined}
+                tabIndex={draft.status === "draft" ? 0 : undefined}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSelectDraft(draft); }}
               >
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{draft.original_input}</div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <div className="text-xs text-neutral-500 mt-1">
                     {draft.task_type} | {new Date(draft.created_at).toLocaleString("zh-CN")}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  <span className={`px-2 py-1.5 text-xs rounded ${draftStatusColors[draft.status] || "bg-gray-100"}`}>
+                  <span className={`px-2 py-1.5 text-xs rounded-full ${draftStatusColors[draft.status] || "bg-neutral-100"}`}>
                     {draft.status === "draft" ? "草稿" : draft.status === "confirmed" ? "已确认" : "已发送"}
                   </span>
                   {draft.status === "draft" && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleSend(draft.id); }}
-                      className="px-3 py-2 text-sm bg-green-600 text-white rounded hover:bg-green-700 focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:outline-none"
+                      aria-label={`发送草稿: ${draft.original_input.slice(0, 20)}`}
+                      className="px-3 py-2 text-sm bg-success-600 text-white rounded-md hover:bg-success-700 focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
                     >
                       发送
                     </button>

@@ -128,39 +128,39 @@ export interface PromptDraft {
 
 // ==================== 状态颜色映射 ====================
 
-// statusColors 将任务/Agent 状态映射到 Tailwind CSS 类名
+// statusColors 将任务/Agent 状态映射到 Tailwind CSS 类名（使用语义色 token）
 export const statusColors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  queued: 'bg-gray-100 text-gray-800',
-  admitted: 'bg-blue-100 text-blue-800',
-  running: 'bg-green-100 text-green-800',
-  completed: 'bg-emerald-100 text-emerald-800',
-  failed: 'bg-red-100 text-red-800',
-  cancelled: 'bg-gray-200 text-gray-600',
-  evicted: 'bg-orange-100 text-orange-800',
-  paused: 'bg-yellow-100 text-yellow-800',
-  stopped: 'bg-gray-200 text-gray-600',
-  starting: 'bg-blue-100 text-blue-800',
-  recoverable: 'bg-purple-100 text-purple-800',
-  orphaned: 'bg-red-100 text-red-800',
-  active: 'bg-green-100 text-green-800',
-  detached: 'bg-yellow-100 text-yellow-800',
-  closed: 'bg-gray-200 text-gray-600',
+  pending: 'bg-warning-50 text-warning-600',
+  queued: 'bg-neutral-100 text-neutral-600',
+  admitted: 'bg-primary-50 text-primary-700',
+  running: 'bg-success-50 text-success-700',
+  completed: 'bg-success-50 text-success-700',
+  failed: 'bg-error-50 text-error-700',
+  cancelled: 'bg-neutral-200 text-neutral-600',
+  evicted: 'bg-warning-50 text-warning-600',
+  paused: 'bg-warning-50 text-warning-600',
+  stopped: 'bg-neutral-200 text-neutral-600',
+  starting: 'bg-primary-50 text-primary-700',
+  recoverable: 'bg-info-50 text-info-600',
+  orphaned: 'bg-error-50 text-error-700',
+  active: 'bg-success-50 text-success-700',
+  detached: 'bg-warning-50 text-warning-600',
+  closed: 'bg-neutral-200 text-neutral-600',
 };
 
 // pressureColors 将资源压力等级映射到 Tailwind 文字颜色类名
 export const pressureColors: Record<string, string> = {
-  normal: 'text-green-600',
-  warn: 'text-yellow-600',
-  high: 'text-orange-600',
-  critical: 'text-red-600',
+  normal: 'text-success-600',
+  warn: 'text-warning-600',
+  high: 'text-warning-600',
+  critical: 'text-error-600',
 };
 
 // draftStatusColors 将草稿状态映射到 Tailwind CSS 类名
 export const draftStatusColors: Record<string, string> = {
-  draft: 'bg-yellow-100 text-yellow-800',
-  confirmed: 'bg-blue-100 text-blue-800',
-  sent: 'bg-green-100 text-green-800',
+  draft: 'bg-warning-50 text-warning-600',
+  confirmed: 'bg-primary-50 text-primary-700',
+  sent: 'bg-success-50 text-success-700',
 };
 
 // statusHex 将任务状态映射到十六进制颜色值（用于 ReactFlow 等需要 inline style 的场景）

@@ -55,26 +55,29 @@ export default function TerminalsPage() {
         <h1 className="text-2xl font-bold">终端管理</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
         >
           新建终端
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">
+          操作失败：{error}
+        </div>
       )}
 
       {/* 新建终端表单 */}
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
+        <form onSubmit={handleCreate} className="mb-6 p-4 bg-neutral-50 rounded-lg border border-neutral-200 space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">Task ID</label>
+            <label htmlFor="terminal-task-id" className="block text-sm font-medium mb-1">Task ID</label>
             <input
+              id="terminal-task-id"
               type="text"
               value={taskId}
               onChange={(e) => setTaskId(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
               placeholder="输入关联的 Task ID"
               required
             />
@@ -82,7 +85,7 @@ export default function TerminalsPage() {
           <button
             type="submit"
             disabled={creating}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
           >
             {creating ? "创建中..." : "创建"}
           </button>
@@ -91,43 +94,49 @@ export default function TerminalsPage() {
 
       {/* 终端会话列表 */}
       {loading ? (
-        <div className="text-gray-500">加载中...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="skeleton h-12 w-full" />
+          ))}
+        </div>
       ) : terminals.length === 0 ? (
-        <p className="text-gray-500">暂无终端会话</p>
+        <p className="text-neutral-500">暂无终端会话</p>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b text-left text-sm text-gray-600">
-              <th className="pb-2">ID</th>
-              <th className="pb-2">Task ID</th>
-              <th className="pb-2">tmux 会话</th>
-              <th className="pb-2">状态</th>
-              <th className="pb-2">创建时间</th>
-              <th className="pb-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {terminals.map((ts) => (
-              <tr key={ts.id} className="border-b hover:bg-gray-50">
-                <td className="py-2 text-sm font-mono">{ts.id.slice(0, 8)}</td>
-                <td className="py-2 text-sm font-mono">{ts.task_id.slice(0, 8)}</td>
-                <td className="py-2 text-sm font-mono">{ts.tmux_session}</td>
-                <td className="py-2 text-sm">
-                  <StatusBadge status={ts.status} />
-                </td>
-                <td className="py-2 text-sm">{new Date(ts.created_at).toLocaleString()}</td>
-                <td className="py-2 text-sm">
-                  <Link
-                    href={`/terminals/${ts.id}`}
-                    className="text-blue-600 hover:underline"
-                  >
-                    打开
-                  </Link>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-sm text-neutral-600">
+                <th className="pb-2">ID</th>
+                <th className="pb-2">Task ID</th>
+                <th className="pb-2">tmux 会话</th>
+                <th className="pb-2">状态</th>
+                <th className="pb-2">创建时间</th>
+                <th className="pb-2">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {terminals.map((ts) => (
+                <tr key={ts.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                  <td className="py-2 text-sm font-mono">{ts.id.slice(0, 8)}</td>
+                  <td className="py-2 text-sm font-mono">{ts.task_id.slice(0, 8)}</td>
+                  <td className="py-2 text-sm font-mono">{ts.tmux_session}</td>
+                  <td className="py-2 text-sm">
+                    <StatusBadge status={ts.status} />
+                  </td>
+                  <td className="py-2 text-sm">{new Date(ts.created_at).toLocaleString()}</td>
+                  <td className="py-2 text-sm">
+                    <Link
+                      href={`/terminals/${ts.id}`}
+                      className="text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded"
+                    >
+                      打开
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

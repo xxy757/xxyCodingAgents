@@ -58,34 +58,34 @@ export default function DashboardPage() {
     {
       label: "活跃 Agent",
       value: metrics?.active_agents ?? "-",
-      color: "bg-blue-50 text-blue-700",
+      color: "bg-primary-50 text-primary-700",
     },
     {
       label: "内存使用",
       value: metrics ? `${metrics.memory_percent.toFixed(1)}%` : "-",
-      color: "bg-purple-50 text-purple-700",
+      color: "bg-info-50 text-info-600",
     },
     {
       label: "CPU 使用",
       value: metrics ? `${metrics.cpu_percent.toFixed(1)}%` : "-",
-      color: "bg-orange-50 text-orange-700",
+      color: "bg-warning-50 text-warning-600",
     },
     {
       label: "磁盘使用",
       value: metrics ? `${metrics.disk_percent.toFixed(1)}%` : "-",
-      color: "bg-pink-50 text-pink-700",
+      color: "bg-error-50 text-error-600",
     },
     {
       label: "压力等级",
       value: metrics?.pressure_level ?? "-",
       color:
         metrics?.pressure_level === "normal"
-          ? "bg-green-50 text-green-700"
+          ? "bg-success-50 text-success-700"
           : metrics?.pressure_level === "warn"
-          ? "bg-yellow-50 text-yellow-700"
+          ? "bg-warning-50 text-warning-600"
           : metrics?.pressure_level
-          ? "bg-red-50 text-red-700"
-          : "bg-gray-50 text-gray-700",
+          ? "bg-error-50 text-error-700"
+          : "bg-neutral-50 text-neutral-700",
     },
   ];
 
@@ -114,7 +114,7 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-bold mb-6">系统仪表盘</h1>
 
       {/* Prompt Composer 快速入口 */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-5 mb-6 border border-blue-100">
+      <div className="bg-gradient-to-r from-primary-50 to-primary-100 rounded-lg p-5 mb-6 border border-primary-200">
         <div className="flex gap-3">
           <input
             type="text"
@@ -122,47 +122,60 @@ export default function DashboardPage() {
             onChange={(e) => setQuickInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleQuickSubmit()}
             placeholder="今天想让我帮你做什么？"
-            className="flex-1 border rounded-lg px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            aria-label="快速任务输入"
+            className="flex-1 border border-neutral-300 rounded-lg px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
           />
           <button
             onClick={() => handleQuickSubmit()}
-            className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+            className="px-5 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
           >
             优化提示词
           </button>
         </div>
-        <div className="mt-3 flex gap-2 flex-wrap">
+        <div className="mt-3 flex gap-2 flex-wrap" role="group" aria-label="快捷任务类型">
           {QUICK_TASKS.map((t, i) => (
             <button
               key={i}
               onClick={() => handleQuickSubmit(t.type)}
-              className="px-4 py-2 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
+              aria-label={t.label}
+              className="px-4 py-2 text-sm bg-white border border-neutral-200 rounded-full hover:bg-primary-50 hover:border-primary-300 transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
             >
-              {t.emoji} {t.label}
+              <span aria-hidden="true">{t.emoji}</span> {t.label}
             </button>
           ))}
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">
+          加载失败：{error}。请检查后端服务是否运行。
+        </div>
       )}
 
       {/* 指标卡片网格 */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
-        {cards.map((card) => (
-          <div key={card.label} className={`p-4 rounded-lg ${card.color}`}>
-            <div className="text-sm opacity-75">{card.label}</div>
-            <div className="text-2xl font-bold mt-1">{card.value}</div>
-          </div>
-        ))}
+        {metrics === null ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-4 rounded-lg bg-neutral-50">
+              <div className="skeleton h-4 w-16 mb-2" />
+              <div className="skeleton h-8 w-20" />
+            </div>
+          ))
+        ) : (
+          cards.map((card) => (
+            <div key={card.label} className={`p-4 rounded-lg ${card.color}`}>
+              <div className="text-sm opacity-75">{card.label}</div>
+              <div className="text-2xl font-bold mt-1">{card.value}</div>
+            </div>
+          ))
+        )}
       </div>
 
       {/* 服务状态 */}
       <h2 className="text-lg font-semibold mb-4">服务状态</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {serviceCards.map((card) => (
-          <div key={card.label} className="p-4 bg-white border rounded-lg flex items-center justify-between">
+          <div key={card.label} className="p-4 bg-white border border-neutral-200 rounded-lg flex items-center justify-between">
             <span className="font-medium">{card.label}</span>
             <StatusBadge status={card.status} />
           </div>

@@ -72,25 +72,28 @@ export default function RunsPage() {
         <h1 className="text-2xl font-bold">运行管理</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
         >
           新建 Run
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">
+          操作失败：{error}
+        </div>
       )}
 
       {/* 新建运行表单 */}
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 p-4 bg-gray-50 rounded-lg space-y-3">
+        <form onSubmit={handleCreate} className="mb-6 p-4 bg-neutral-50 rounded-lg border border-neutral-200 space-y-3">
           <div>
-            <label className="block text-sm font-medium mb-1">项目</label>
+            <label htmlFor="run-project" className="block text-sm font-medium mb-1">项目</label>
             <select
+              id="run-project"
               value={projectId}
               onChange={(e) => setProjectId(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
               required
             >
               <option value="">选择项目</option>
@@ -102,11 +105,12 @@ export default function RunsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">工作流模板</label>
+            <label htmlFor="run-template" className="block text-sm font-medium mb-1">工作流模板</label>
             <select
+              id="run-template"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
             >
               <option value="">无模板（手动管理）</option>
               {templates.map((t) => (
@@ -117,12 +121,13 @@ export default function RunsPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">标题</label>
+            <label htmlFor="run-title" className="block text-sm font-medium mb-1">标题</label>
             <input
+              id="run-title"
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full border rounded px-3 py-2 text-sm"
+              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
               placeholder="输入 Run 标题"
               required
             />
@@ -130,7 +135,7 @@ export default function RunsPage() {
           <button
             type="submit"
             disabled={creating}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
           >
             {creating ? "创建中..." : "创建"}
           </button>
@@ -139,38 +144,44 @@ export default function RunsPage() {
 
       {/* 运行列表表格 */}
       {loading ? (
-        <div className="text-gray-500">加载中...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="skeleton h-12 w-full" />
+          ))}
+        </div>
       ) : runs.length === 0 ? (
-        <p className="text-gray-500">暂无运行记录</p>
+        <p className="text-neutral-500">暂无运行记录</p>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b text-left text-sm text-gray-600">
-              <th className="pb-2">ID</th>
-              <th className="pb-2">标题</th>
-              <th className="pb-2">状态</th>
-              <th className="pb-2">创建时间</th>
-              <th className="pb-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((run) => (
-              <tr key={run.id} className="border-b hover:bg-gray-50">
-                <td className="py-2 text-sm font-mono">{run.id.slice(0, 8)}</td>
-                <td className="py-2 text-sm">{run.title}</td>
-                <td className="py-2 text-sm">
-                  <StatusBadge status={run.status} />
-                </td>
-                <td className="py-2 text-sm">{new Date(run.created_at).toLocaleString()}</td>
-                <td className="py-2 text-sm">
-                  <Link href={`/runs/${run.id}`} className="text-blue-600 hover:underline">
-                    查看详情
-                  </Link>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-sm text-neutral-600">
+                <th className="pb-2">ID</th>
+                <th className="pb-2">标题</th>
+                <th className="pb-2">状态</th>
+                <th className="pb-2">创建时间</th>
+                <th className="pb-2">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {runs.map((run) => (
+                <tr key={run.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                  <td className="py-2 text-sm font-mono">{run.id.slice(0, 8)}</td>
+                  <td className="py-2 text-sm">{run.title}</td>
+                  <td className="py-2 text-sm">
+                    <StatusBadge status={run.status} />
+                  </td>
+                  <td className="py-2 text-sm">{new Date(run.created_at).toLocaleString()}</td>
+                  <td className="py-2 text-sm">
+                    <Link href={`/runs/${run.id}`} className="text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
+                      查看详情
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );

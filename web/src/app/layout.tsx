@@ -1,8 +1,14 @@
 // layout.tsx - 应用根布局
 // 提供全局 HTML 结构、侧边栏和主内容区域布局。
 import type { Metadata } from "next";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
+
+const geist = Geist({
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "AI Dev Platform",
@@ -13,9 +19,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN">
-      <body className="flex h-screen overflow-hidden">
+      <body className={`${geist.className} flex h-screen overflow-hidden`}>
+        <a href="#main-content" className="skip-to-content">
+          跳转到主内容
+        </a>
         <Sidebar />
-        <main className="flex-1 overflow-y-auto bg-gray-50 p-6">
+        <main id="main-content" className="flex-1 overflow-y-auto bg-neutral-50 p-6">
           {children}
         </main>
       </body>

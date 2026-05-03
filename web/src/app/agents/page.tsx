@@ -29,7 +29,6 @@ export default function AgentsPage() {
     try {
       setError(null);
       await apiFetch(`/api/agents/${id}/${action}`, { method: "POST" });
-      // 操作成功后刷新列表
       const updated = await apiFetch<AgentInstance[]>("/api/agents");
       setAgents(updated);
     } catch (e: any) {
@@ -44,68 +43,76 @@ export default function AgentsPage() {
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">
+          操作失败：{error}
+        </div>
       )}
 
       {loading ? (
-        <div className="text-gray-500">加载中...</div>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="skeleton h-12 w-full" />
+          ))}
+        </div>
       ) : agents.length === 0 ? (
-        <p className="text-gray-500">暂无 Agent 实例</p>
+        <p className="text-neutral-500">暂无 Agent 实例</p>
       ) : (
-        <table className="w-full border-collapse">
-          <thead>
-            <tr className="border-b text-left text-sm text-gray-600">
-              <th className="pb-2">ID</th>
-              <th className="pb-2">类型</th>
-              <th className="pb-2">状态</th>
-              <th className="pb-2">tmux 会话</th>
-              <th className="pb-2">创建时间</th>
-              <th className="pb-2">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {agents.map((agent) => (
-              <tr key={agent.id} className="border-b hover:bg-gray-50">
-                <td className="py-2 text-sm font-mono">{agent.id.slice(0, 8)}</td>
-                <td className="py-2 text-sm">{agent.agent_kind}</td>
-                <td className="py-2 text-sm">
-                  <StatusBadge status={agent.status} />
-                </td>
-                <td className="py-2 text-sm font-mono">{agent.tmux_session || "-"}</td>
-                <td className="py-2 text-sm">{new Date(agent.created_at).toLocaleString()}</td>
-                <td className="py-2 text-sm space-x-2">
-                  {/* 运行中的 Agent 可暂停 */}
-                  {agent.status === "running" && (
-                    <button
-                      onClick={() => handleAction(agent.id, "pause")}
-                      className="px-3 py-2 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:outline-none"
-                    >
-                      暂停
-                    </button>
-                  )}
-                  {/* 已暂停的 Agent 可恢复 */}
-                  {agent.status === "paused" && (
-                    <button
-                      onClick={() => handleAction(agent.id, "resume")}
-                      className="px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
-                    >
-                      恢复
-                    </button>
-                  )}
-                  {/* 未停止的 Agent 可停止 */}
-                  {agent.status !== "stopped" && (
-                    <button
-                      onClick={() => handleAction(agent.id, "stop")}
-                      className="px-3 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
-                    >
-                      停止
-                    </button>
-                  )}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="border-b border-neutral-200 text-left text-sm text-neutral-600">
+                <th className="pb-2">ID</th>
+                <th className="pb-2">类型</th>
+                <th className="pb-2">状态</th>
+                <th className="pb-2">tmux 会话</th>
+                <th className="pb-2">创建时间</th>
+                <th className="pb-2">操作</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {agents.map((agent) => (
+                <tr key={agent.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                  <td className="py-2 text-sm font-mono">{agent.id.slice(0, 8)}</td>
+                  <td className="py-2 text-sm">{agent.agent_kind}</td>
+                  <td className="py-2 text-sm">
+                    <StatusBadge status={agent.status} />
+                  </td>
+                  <td className="py-2 text-sm font-mono">{agent.tmux_session || "-"}</td>
+                  <td className="py-2 text-sm">{new Date(agent.created_at).toLocaleString()}</td>
+                  <td className="py-2 text-sm space-x-2">
+                    {agent.status === "running" && (
+                      <button
+                        onClick={() => handleAction(agent.id, "pause")}
+                        aria-label={`暂停 Agent ${agent.id.slice(0, 8)}`}
+                        className="px-3 py-2 bg-warning-500 text-white rounded-md text-sm hover:bg-warning-600 focus-visible:ring-2 focus-visible:ring-warning-500 focus-visible:outline-none"
+                      >
+                        暂停
+                      </button>
+                    )}
+                    {agent.status === "paused" && (
+                      <button
+                        onClick={() => handleAction(agent.id, "resume")}
+                        aria-label={`恢复 Agent ${agent.id.slice(0, 8)}`}
+                        className="px-3 py-2 bg-primary-600 text-white rounded-md text-sm hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+                      >
+                        恢复
+                      </button>
+                    )}
+                    {agent.status !== "stopped" && (
+                      <button
+                        onClick={() => handleAction(agent.id, "stop")}
+                        aria-label={`停止 Agent ${agent.id.slice(0, 8)}`}
+                        className="px-3 py-2 bg-error-600 text-white rounded-md text-sm hover:bg-error-700 focus-visible:ring-2 focus-visible:ring-error-500 focus-visible:outline-none"
+                      >
+                        停止
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
