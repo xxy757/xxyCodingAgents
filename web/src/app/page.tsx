@@ -110,7 +110,7 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="p-6">
+    <div>
       <h1 className="text-2xl font-bold mb-6">系统仪表盘</h1>
 
       {/* Prompt Composer 快速入口 */}
@@ -122,11 +122,11 @@ export default function DashboardPage() {
             onChange={(e) => setQuickInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleQuickSubmit()}
             placeholder="今天想让我帮你做什么？"
-            className="flex-1 border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300"
+            className="flex-1 border rounded-lg px-4 py-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
           />
           <button
             onClick={() => handleQuickSubmit()}
-            className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium"
+            className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
           >
             优化提示词
           </button>
@@ -136,7 +136,7 @@ export default function DashboardPage() {
             <button
               key={i}
               onClick={() => handleQuickSubmit(t.type)}
-              className="px-3 py-1.5 text-xs bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors"
+              className="px-4 py-2 text-sm bg-white border rounded-full hover:bg-blue-50 hover:border-blue-300 transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
             >
               {t.emoji} {t.label}
             </button>
