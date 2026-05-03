@@ -32,7 +32,7 @@ export function Sidebar() {
           <Link
             key={item.href}
             href={item.href}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none ${
               pathname === item.href
                 ? "bg-slate-700 text-white"
                 : "text-slate-300 hover:bg-slate-800 hover:text-white"

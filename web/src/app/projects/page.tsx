@@ -57,7 +57,7 @@ export default function ProjectsPage() {
         <h1 className="text-2xl font-bold">项目管理</h1>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
         >
           新建项目
         </button>
@@ -104,7 +104,7 @@ export default function ProjectsPage() {
           <button
             type="submit"
             disabled={creating}
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50"
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-green-400 focus-visible:outline-none"
           >
             {creating ? "创建中..." : "创建"}
           </button>
