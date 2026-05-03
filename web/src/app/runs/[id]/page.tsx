@@ -5,7 +5,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, type Task, type Event, type Run, type Gate, approveGate, listGates } from "@/lib/api";
+import { StatusBadge } from "@/components/StatusBadge";
 import {
   ReactFlow,
   Background,
@@ -19,45 +20,12 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
-// Task 任务数据接口
-interface Task {
-  id: string;
-  run_id: string;
-  task_type: string;
-  title: string;
-  status: string;
-  priority: string;
-  resource_class: string;
-  attempt_no: number;
-  created_at: string;
-}
-
-// Event 事件数据接口
-interface Event {
-  id: string;
-  run_id: string;
-  task_id?: string;
-  agent_id?: string;
-  event_type: string;
-  message: string;
-  created_at: string;
-}
-
-// Run 运行数据接口
-interface Run {
-  id: string;
-  project_id: string;
-  title: string;
-  status: string;
-  created_at: string;
-}
-
 // WorkflowGraph 工作流图数据接口（ReactFlow 兼容格式）
 interface WorkflowGraph {
   nodes: {
     id: string;
     type: string;
-    data: { label: string; status: string; task_type: string; task_id: string };
+    data: { label: string; status: string; task_type: string; task_id: string; gate_id?: string; gate_type?: string };
     position: { x: number; y: number };
   }[];
   edges: { id: string; source: string; target: string }[];
@@ -139,9 +107,80 @@ function TaskNode({ data }: { data: { label: string; status: string; task_type: 
   );
 }
 
+// gateStatusBorderColor 根据门禁状态返回边框颜色
+function gateStatusBorderColor(status: string): string {
+  switch (status) {
+    case "passed":
+      return "#22c55e";
+    case "failed":
+      return "#ef4444";
+    case "pending":
+      return "#eab308";
+    default:
+      return "#9ca3af";
+  }
+}
+
+// GateNode 是工作流图中的门禁节点组件（菱形样式）
+function GateNode({ data }: { data: { label: string; status: string; gate_type: string; gate_id: string; onApprove?: (gateId: string) => void } }) {
+  const borderColor = gateStatusBorderColor(data.status);
+  return (
+    <div
+      style={{
+        padding: "8px 14px",
+        borderRadius: 4,
+        border: `2px dashed ${borderColor}`,
+        background: data.status === "passed" ? "#f0fdf4" : data.status === "failed" ? "#fef2f2" : "#fefce8",
+        minWidth: 120,
+        fontSize: 11,
+        transform: "rotate(0deg)",
+      }}
+    >
+      <Handle type="target" position={Position.Top} style={{ background: borderColor }} />
+      <div style={{ fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ color: "#d97706" }}>&#9670;</span>
+        {data.label}
+      </div>
+      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+        <span
+          style={{
+            padding: "1px 5px",
+            borderRadius: 3,
+            background: borderColor,
+            color: "#fff",
+            fontSize: 9,
+          }}
+        >
+          {data.status || "pending"}
+        </span>
+        <span style={{ color: "#6b7280", fontSize: 9 }}>{data.gate_type}</span>
+      </div>
+      {data.gate_type === "manual" && data.status === "pending" && data.onApprove && (
+        <button
+          onClick={() => data.onApprove!(data.gate_id)}
+          style={{
+            marginTop: 4,
+            padding: "2px 8px",
+            fontSize: 10,
+            background: "#3b82f6",
+            color: "#fff",
+            border: "none",
+            borderRadius: 3,
+            cursor: "pointer",
+          }}
+        >
+          通过
+        </button>
+      )}
+      <Handle type="source" position={Position.Bottom} style={{ background: borderColor }} />
+    </div>
+  );
+}
+
 // 注册自定义节点类型
 const nodeTypes: NodeTypes = {
   task: TaskNode as any,
+  gate: GateNode as any,
 };
 
 // RunDetailPage 运行详情页面组件
@@ -150,6 +189,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
   const [run, setRun] = useState<Run | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
+  const [gates, setGates] = useState<Gate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"tasks" | "timeline" | "workflow">("tasks");
   const [workflowGraph, setWorkflowGraph] = useState<WorkflowGraph | null>(null);
@@ -178,6 +218,8 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     apiFetch<WorkflowGraph>(`/api/runs/${id}/workflow`)
       .then(setWorkflowGraph)
       .catch(() => {});
+
+    listGates(id).then(setGates).catch(() => {});
   }, [id]);
 
   // handleRetry 重试失败或被驱逐的任务
@@ -200,23 +242,15 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     }
   };
 
-  // taskStatusColor 根据任务状态返回表格中的样式类名
-  const taskStatusColor = (status: string) => {
-    switch (status) {
-      case "running":
-        return "bg-green-100 text-green-700";
-      case "queued":
-        return "bg-yellow-100 text-yellow-700";
-      case "completed":
-        return "bg-blue-100 text-blue-700";
-      case "failed":
-        return "bg-red-100 text-red-700";
-      case "blocked":
-        return "bg-purple-100 text-purple-700";
-      case "evicted":
-        return "bg-orange-100 text-orange-700";
-      default:
-        return "bg-gray-100 text-gray-700";
+  // handleApproveGate 通过一个门禁
+  const handleApproveGate = async (gateId: string) => {
+    try {
+      await approveGate(gateId, "user");
+      listGates(id).then(setGates);
+      // 刷新工作流图
+      apiFetch<WorkflowGraph>(`/api/runs/${id}/workflow`).then(setWorkflowGraph).catch(() => {});
+    } catch (e: any) {
+      setError(e.message);
     }
   };
 
@@ -241,11 +275,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
           ← 返回
         </button>
         <h1 className="text-2xl font-bold">{run?.title || `Run ${id.slice(0, 8)}`}</h1>
-        {run && (
-          <span className={`px-2 py-0.5 rounded text-xs font-medium ${taskStatusColor(run.status)}`}>
-            {run.status}
-          </span>
-        )}
+        {run && <StatusBadge status={run.status} />}
       </div>
 
       {error && (
@@ -306,9 +336,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
                     <td className="py-2 text-sm">{task.title}</td>
                     <td className="py-2 text-sm">{task.task_type}</td>
                     <td className="py-2 text-sm">
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${taskStatusColor(task.status)}`}>
-                        {task.status}
-                      </span>
+                      <StatusBadge status={task.status} />
                     </td>
                     <td className="py-2 text-sm">{task.priority}</td>
                     <td className="py-2 text-sm">{task.resource_class}</td>
@@ -380,8 +408,11 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
               <ReactFlow
                 nodes={workflowGraph.nodes.map((n) => ({
                   id: n.id,
-                  type: "task",
-                  data: n.data,
+                  type: n.type || "task",
+                  data: {
+                    ...n.data,
+                    onApprove: n.type === "gate" && n.data.gate_type === "manual" && n.data.status !== "passed" ? handleApproveGate : undefined,
+                  },
                   position: { x: n.position.x, y: n.position.y },
                 }))}
                 edges={workflowGraph.edges.map((e) => ({

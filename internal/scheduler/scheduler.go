@@ -32,9 +32,8 @@ import (
 
 // Orchestrator 是调度器回调编排器所需的接口。
 type Orchestrator interface {
-	CompleteTask(ctx context.Context, taskID string) error
+	CompleteTask(ctx context.Context, taskID string, outputData string) error
 	FailTask(ctx context.Context, taskID, reason string) error
-	UnblockDependentTasks(ctx context.Context, completedTaskID string) error
 }
 
 // PressureLevel 表示系统资源压力等级。
@@ -494,7 +493,7 @@ func (s *Scheduler) checkTaskCompletion(ctx context.Context, activeAgents []stor
 			s.repos.AgentInstances.UpdateStatus(entry.Agent.ID, domain.AgentStatusStopped)
 			s.repos.AgentInstances.UpdateLastOutputAt(entry.Agent.ID)
 			if s.orch != nil {
-				if err := s.orch.CompleteTask(ctx, entry.Task.ID); err != nil {
+				if err := s.orch.CompleteTask(ctx, entry.Task.ID, ""); err != nil {
 					slog.Error("complete task", "task_id", entry.Task.ID, "error", err)
 				}
 			}

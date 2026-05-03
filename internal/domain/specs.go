@@ -41,11 +41,14 @@ type WorkflowTemplate struct {
 	OnFailure    string                `json:"on_failure" db:"on_failure"`
 }
 
-// WorkflowNode 表示工作流中的一个节点，关联一个 TaskSpec。
+// WorkflowNode 表示工作流中的一个节点。
+// Kind 为 "task" 时关联 TaskSpec 执行任务；Kind 为 "gate" 时作为质量门禁。
 type WorkflowNode struct {
 	ID         string `json:"id"`
-	TaskSpecID string `json:"task_spec_id"`
+	TaskSpecID string `json:"task_spec_id,omitempty"` // gate 节点可为空
 	Label      string `json:"label"`
+	Kind       string `json:"kind"`             // "task"（默认）或 "gate"
+	Config     string `json:"config,omitempty"` // gate 类型时为 GateConfig 的 JSON
 }
 
 // WorkflowEdge 表示工作流中两个节点之间的依赖关系（有向边）。

@@ -105,7 +105,7 @@ func TestCompleteTask(t *testing.T) {
 	tasks, _ := repos.Tasks.ListByRun(run.ID)
 
 	buildTask := tasks[0]
-	if err := o.CompleteTask(context.Background(), buildTask.ID); err != nil {
+	if err := o.CompleteTask(context.Background(), buildTask.ID, `{"result":"ok"}`); err != nil {
 		t.Fatalf("CompleteTask: %v", err)
 	}
 
@@ -137,7 +137,7 @@ func TestCompleteTask_AllDoneFinalizesRun(t *testing.T) {
 		CreatedAt: time.Now(), UpdatedAt: time.Now(),
 	})
 
-	o.CompleteTask(context.Background(), "t1")
+	o.CompleteTask(context.Background(), "t1", "")
 
 	gotRun, _ := repos.Runs.GetByID(run.ID)
 	if gotRun.Status != domain.RunStatusCompleted {
@@ -184,26 +184,5 @@ func TestFailTask_NoAbortPolicy(t *testing.T) {
 	gotRun, _ := repos.Runs.GetByID(run.ID)
 	if gotRun.Status == domain.RunStatusFailed {
 		t.Error("expected run NOT to be failed with continue policy")
-	}
-}
-
-func TestUnblockDependentTasks_NoDependencies(t *testing.T) {
-	o, repos := setupOrchestratorTest(t)
-	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
-
-	run, _ := o.CreateRun(context.Background(), "p1", "", "run", "")
-	repos.Tasks.Create(&domain.Task{
-		ID: "t1", RunID: run.ID, TaskType: "code", AttemptNo: 1,
-		Status: domain.TaskStatusBlocked, Priority: domain.PriorityNormal,
-		QueueStatus: "blocked", ResourceClass: domain.ResourceClassLight,
-		Preemptible: true, RestartPolicy: "never", Title: "orphan-blocked",
-		CreatedAt: time.Now(), UpdatedAt: time.Now(),
-	})
-
-	o.UnblockDependentTasks(context.Background(), "nonexistent")
-
-	got, _ := repos.Tasks.GetByID("t1")
-	if got.Status != domain.TaskStatusBlocked {
-		t.Error("task with no dependencies should stay blocked")
 	}
 }

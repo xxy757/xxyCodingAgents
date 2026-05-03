@@ -4,16 +4,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
-
-// TerminalSession 终端会话数据接口
-interface TerminalSession {
-  id: string;
-  task_id: string;
-  tmux_session: string;
-  status: string;
-  created_at: string;
-}
+import { apiFetch, type TerminalSession } from "@/lib/api";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // TerminalsPage 终端管理页面组件
 export default function TerminalsPage() {
@@ -121,15 +113,7 @@ export default function TerminalsPage() {
                 <td className="py-2 text-sm font-mono">{ts.task_id.slice(0, 8)}</td>
                 <td className="py-2 text-sm font-mono">{ts.tmux_session}</td>
                 <td className="py-2 text-sm">
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      ts.status === "active"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {ts.status}
-                  </span>
+                  <StatusBadge status={ts.status} />
                 </td>
                 <td className="py-2 text-sm">{new Date(ts.created_at).toLocaleString()}</td>
                 <td className="py-2 text-sm">

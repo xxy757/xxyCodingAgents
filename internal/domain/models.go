@@ -229,3 +229,69 @@ type CommandLog struct {
 	Duration  int64     `json:"duration_ms" db:"duration_ms"`
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
 }
+
+// PromptDraftStatus 表示提示词草稿的生命周期状态。
+type PromptDraftStatus string
+
+const (
+	PromptDraftStatusDraft     PromptDraftStatus = "draft"     // 草稿，可编辑
+	PromptDraftStatusConfirmed PromptDraftStatus = "confirmed" // 已确认，准备发送
+	PromptDraftStatusSent      PromptDraftStatus = "sent"      // 已发送，Run/Task 已创建
+)
+
+// PromptDraft 表示一个提示词草稿，用户输入经规则模板生成结构化提示词后，
+// 用户可编辑确认，最终发送为 Run/Task。
+type PromptDraft struct {
+	ID              string            `json:"id" db:"id"`
+	ProjectID       string            `json:"project_id" db:"project_id"`
+	OriginalInput   string            `json:"original_input" db:"original_input"`
+	GeneratedPrompt string            `json:"generated_prompt" db:"generated_prompt"`
+	FinalPrompt     string            `json:"final_prompt,omitempty" db:"final_prompt"`
+	TaskType        string            `json:"task_type" db:"task_type"`
+	Status          PromptDraftStatus `json:"status" db:"status"`
+	CreatedAt       time.Time         `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time         `json:"updated_at" db:"updated_at"`
+}
+
+// GateType 表示质量门禁的验证方式。
+type GateType string
+
+const (
+	GateTypeAuto     GateType = "auto"     // 脚本自动验证
+	GateTypeManual   GateType = "manual"   // 用户手动确认
+	GateTypeApproval GateType = "approval" // 多人审批（MVP 简化为单人）
+)
+
+// GateStatus 表示质量门禁的状态。
+type GateStatus string
+
+const (
+	GateStatusPending GateStatus = "pending" // 等待验证
+	GateStatusPassed  GateStatus = "passed"  // 已通过
+	GateStatusFailed  GateStatus = "failed"  // 未通过
+	GateStatusSkipped GateStatus = "skipped" // 已跳过
+)
+
+// GateConfig 描述门禁节点的配置，存储在 WorkflowNode.Config 的 JSON 中。
+type GateConfig struct {
+	Type           GateType `json:"type"`
+	VerifyCommand  string   `json:"verify_command,omitempty"`  // auto 类型的验证命令
+	Prompt         string   `json:"prompt,omitempty"`          // manual 类型的提示文本
+	RequiredVotes  int      `json:"required_votes,omitempty"`  // approval 类型所需票数
+	TimeoutMinutes int      `json:"timeout_minutes,omitempty"` // 门禁超时（分钟）
+}
+
+// Gate 表示工作流中的一个质量门禁实例，关联到某个 Run 的某个节点。
+type Gate struct {
+	ID           string     `json:"id" db:"id"`
+	RunID        string     `json:"run_id" db:"run_id"`
+	NodeID       string     `json:"node_id" db:"node_id"`
+	GateType     GateType   `json:"gate_type" db:"gate_type"`
+	Status       GateStatus `json:"status" db:"status"`
+	ConfigJSON   string     `json:"config_json" db:"config_json"`
+	VerifyResult string     `json:"verify_result,omitempty" db:"verify_result"`
+	ApprovedBy   string     `json:"approved_by,omitempty" db:"approved_by"`
+	ApprovedAt   *time.Time `json:"approved_at,omitempty" db:"approved_at"`
+	CreatedAt    time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at" db:"updated_at"`
+}

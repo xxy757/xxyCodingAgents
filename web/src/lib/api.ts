@@ -95,7 +95,9 @@ export interface ResourceSnapshot {
 export interface TerminalSession {
   id: string;
   task_id: string;
+  agent_id?: string;
   tmux_session: string;
+  tmux_pane: string;
   status: string;
   log_file_path: string;
   created_at: string;
@@ -109,6 +111,19 @@ export interface WorkflowTemplate {
   nodes_json: string;
   edges_json: string;
   on_failure: string;
+}
+
+// PromptDraft 提示词草稿
+export interface PromptDraft {
+  id: string;
+  project_id: string;
+  original_input: string;
+  generated_prompt: string;
+  final_prompt: string;
+  task_type: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // ==================== 状态颜色映射 ====================
@@ -140,3 +155,93 @@ export const pressureColors: Record<string, string> = {
   high: 'text-orange-600',
   critical: 'text-red-600',
 };
+
+// draftStatusColors 将草稿状态映射到 Tailwind CSS 类名
+export const draftStatusColors: Record<string, string> = {
+  draft: 'bg-yellow-100 text-yellow-800',
+  confirmed: 'bg-blue-100 text-blue-800',
+  sent: 'bg-green-100 text-green-800',
+};
+
+// ==================== 提示词草稿 API ====================
+
+// generatePromptDraft 生成提示词草稿
+export function generatePromptDraft(
+  projectId: string,
+  originalInput: string,
+  taskType?: string,
+): Promise<PromptDraft> {
+  return apiFetch<PromptDraft>('/api/prompt-drafts/generate', {
+    method: 'POST',
+    body: JSON.stringify({ project_id: projectId, original_input: originalInput, task_type: taskType }),
+  });
+}
+
+// updatePromptDraft 更新提示词草稿的 final_prompt
+export function updatePromptDraft(
+  id: string,
+  finalPrompt: string,
+  taskType?: string,
+): Promise<PromptDraft> {
+  return apiFetch<PromptDraft>(`/api/prompt-drafts/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify({ final_prompt: finalPrompt, task_type: taskType }),
+  });
+}
+
+// sendPromptDraft 确认并发送提示词草稿，创建 Run/Task
+export function sendPromptDraft(
+  id: string,
+): Promise<{ draft_id: string; run_id: string; task_id: string; status: string }> {
+  return apiFetch(`/api/prompt-drafts/${id}/send`, {
+    method: 'POST',
+  });
+}
+
+// listPromptDrafts 列出指定项目的提示词草稿
+export function listPromptDrafts(projectId: string): Promise<PromptDraft[]> {
+  return apiFetch<PromptDraft[]>(`/api/prompt-drafts?project_id=${encodeURIComponent(projectId)}`);
+}
+
+// ==================== 质量门禁 ====================
+
+// Gate 质量门禁实体
+export interface Gate {
+  id: string;
+  run_id: string;
+  node_id: string;
+  gate_type: string;
+  status: string;
+  config_json: string;
+  verify_result: string;
+  approved_by: string;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// gateStatusColors 将门禁状态映射到 Tailwind CSS 类名
+export const gateStatusColors: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  passed: 'bg-green-100 text-green-800',
+  failed: 'bg-red-100 text-red-800',
+  skipped: 'bg-gray-200 text-gray-600',
+};
+
+// approveGate 通过一个门禁
+export function approveGate(id: string, approvedBy?: string): Promise<Gate> {
+  return apiFetch<Gate>(`/api/gates/${id}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ approved_by: approvedBy || 'user' }),
+  });
+}
+
+// listGates 列出指定运行的所有门禁
+export function listGates(runId: string): Promise<Gate[]> {
+  return apiFetch<Gate[]>(`/api/gates?run_id=${encodeURIComponent(runId)}`);
+}
+
+// getGate 获取单个门禁详情
+export function getGate(id: string): Promise<Gate> {
+  return apiFetch<Gate>(`/api/gates/${id}`);
+}

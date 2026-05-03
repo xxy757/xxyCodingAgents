@@ -636,9 +636,7 @@ func TestE2E_FullWorkflowPipeline(t *testing.T) {
 	}
 
 	repos.Tasks.UpdateStatus(buildTask.ID, domain.TaskStatusRunning)
-	repos.Tasks.UpdateStatus(buildTask.ID, domain.TaskStatusCompleted)
-
-	orch.UnblockDependentTasks(context.Background(), buildTask.ID)
+	orch.CompleteTask(context.Background(), buildTask.ID, `{"result":"ok"}`)
 
 	testTaskAfter, _ := repos.Tasks.GetByID(testTask.ID)
 	if testTaskAfter.Status != domain.TaskStatusQueued {

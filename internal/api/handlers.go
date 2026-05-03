@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/xxy757/xxyCodingAgents/internal/domain"
+	"github.com/xxy757/xxyCodingAgents/internal/prompt"
 )
 
 // handleCreateProject 处理创建项目的请求，需要提供项目名称。
@@ -209,12 +210,17 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 		tasks = []*domain.Task{}
 	}
 
+	// 加载门禁数据
+	gates, _ := s.repos.Gates.ListByRun(runID)
+
 	// 定义 ReactFlow 兼容的图数据结构
 	type NodeData struct {
 		Label    string `json:"label"`
 		Status   string `json:"status"`
 		TaskType string `json:"task_type"`
 		TaskID   string `json:"task_id"`
+		GateID   string `json:"gate_id,omitempty"`
+		GateType string `json:"gate_type,omitempty"`
 	}
 	type EdgeData struct {
 		ID     string `json:"id"`
@@ -223,9 +229,9 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 	}
 	type WorkflowGraph struct {
 		Nodes []struct {
-			ID     string   `json:"id"`
-			Type   string   `json:"type"`
-			Data   NodeData `json:"data"`
+			ID       string   `json:"id"`
+			Type     string   `json:"type"`
+			Data     NodeData `json:"data"`
 			Position struct {
 				X float64 `json:"x"`
 				Y float64 `json:"y"`
@@ -259,8 +265,29 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
+			// 建立节点到门禁状态和 ID 的映射
+			nodeGateStatusMap := make(map[string]string)
+			nodeGateIDMap := make(map[string]string)
+			nodeGateTypeMap := make(map[string]string)
+			for _, g := range gates {
+				nodeGateStatusMap[g.NodeID] = string(g.Status)
+				nodeGateIDMap[g.NodeID] = g.ID
+				nodeGateTypeMap[g.NodeID] = string(g.GateType)
+			}
+
 			// 构建节点数据
 			for i, n := range nodes {
+				nodeType := "task"
+				if n.Kind == "gate" {
+					nodeType = "gate"
+				}
+
+				// 根据节点类型选择状态来源
+				status := nodeStatusMap[n.ID]
+				if nodeType == "gate" {
+					status = nodeGateStatusMap[n.ID]
+				}
+
 				graph.Nodes = append(graph.Nodes, struct {
 					ID       string   `json:"id"`
 					Type     string   `json:"type"`
@@ -271,12 +298,14 @@ func (s *Server) handleRunWorkflow(w http.ResponseWriter, r *http.Request) {
 					} `json:"position"`
 				}{
 					ID:   n.ID,
-					Type: "task",
+					Type: nodeType,
 					Data: NodeData{
 						Label:    n.Label,
-						Status:   nodeStatusMap[n.ID],
+						Status:   status,
 						TaskType: n.Label,
 						TaskID:   nodeTaskIDMap[n.ID],
+						GateID:   nodeGateIDMap[n.ID],
+						GateType: nodeGateTypeMap[n.ID],
 					},
 					Position: struct {
 						X float64 `json:"x"`
@@ -820,4 +849,282 @@ func (s *Server) handleCreateWorkflowTemplate(w http.ResponseWriter, r *http.Req
 		return
 	}
 	writeJSON(w, http.StatusCreated, wt)
+}
+
+// ==================== 提示词草稿 API ====================
+
+// handleGeneratePromptDraft 处理生成提示词草稿的请求。
+// 根据用户原始输入和任务类型，使用规则模板生成结构化草稿。
+func (s *Server) handleGeneratePromptDraft(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ProjectID     string `json:"project_id"`
+		OriginalInput string `json:"original_input"`
+		TaskType      string `json:"task_type"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.ProjectID == "" {
+		writeError(w, http.StatusBadRequest, "project_id is required")
+		return
+	}
+	if req.OriginalInput == "" {
+		writeError(w, http.StatusBadRequest, "original_input is required")
+		return
+	}
+
+	// 验证项目存在
+	project, err := s.repos.Projects.GetByID(req.ProjectID)
+	if err != nil {
+		slog.Error("get project for prompt draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to get project")
+		return
+	}
+	if project == nil {
+		writeError(w, http.StatusNotFound, "project not found")
+		return
+	}
+
+	// 使用规则模板生成结构化草稿
+	generatedPrompt := prompt.GenerateDraft(req.OriginalInput, req.TaskType)
+
+	// 推断实际使用的任务类型
+	taskType := req.TaskType
+	if taskType == "" {
+		taskType = prompt.InferTaskType(req.OriginalInput)
+	}
+
+	draft := &domain.PromptDraft{
+		ID:              uuid.New().String(),
+		ProjectID:       req.ProjectID,
+		OriginalInput:   req.OriginalInput,
+		GeneratedPrompt: generatedPrompt,
+		TaskType:        taskType,
+		Status:          domain.PromptDraftStatusDraft,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
+	if err := s.repos.PromptDrafts.Create(draft); err != nil {
+		slog.Error("create prompt draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create prompt draft")
+		return
+	}
+	writeJSON(w, http.StatusCreated, draft)
+}
+
+// handleUpdatePromptDraft 处理更新提示词草稿的请求。
+// 用户编辑 final_prompt 后保存，仅 draft 状态的草稿可编辑。
+func (s *Server) handleUpdatePromptDraft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	draft, err := s.repos.PromptDrafts.GetByID(id)
+	if err != nil {
+		slog.Error("get prompt draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to get prompt draft")
+		return
+	}
+	if draft == nil {
+		writeError(w, http.StatusNotFound, "prompt draft not found")
+		return
+	}
+	if draft.Status != domain.PromptDraftStatusDraft {
+		writeError(w, http.StatusBadRequest, "only draft status can be edited")
+		return
+	}
+
+	var req struct {
+		FinalPrompt string `json:"final_prompt"`
+		TaskType    string `json:"task_type"`
+	}
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	draft.FinalPrompt = req.FinalPrompt
+	if req.TaskType != "" {
+		draft.TaskType = req.TaskType
+	}
+	draft.UpdatedAt = time.Now()
+
+	if err := s.repos.PromptDrafts.Update(draft); err != nil {
+		slog.Error("update prompt draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to update prompt draft")
+		return
+	}
+	writeJSON(w, http.StatusOK, draft)
+}
+
+// handleSendPromptDraft 处理发送提示词草稿的请求。
+// 将草稿状态更新为 confirmed，创建 Run 和 Task，然后更新为 sent。
+// Task.InputData 取 final_prompt 而非 original_input。
+func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	draft, err := s.repos.PromptDrafts.GetByID(id)
+	if err != nil {
+		slog.Error("get prompt draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to get prompt draft")
+		return
+	}
+	if draft == nil {
+		writeError(w, http.StatusNotFound, "prompt draft not found")
+		return
+	}
+	if draft.Status != domain.PromptDraftStatusDraft {
+		writeError(w, http.StatusBadRequest, "only draft status can be sent")
+		return
+	}
+
+	// 确定最终使用的提示词：优先用 final_prompt，为空则用 generated_prompt
+	finalPrompt := draft.FinalPrompt
+	if strings.TrimSpace(finalPrompt) == "" {
+		finalPrompt = draft.GeneratedPrompt
+	}
+
+	// 生成任务标题：取 final_prompt 首行或原始输入前 50 字符
+	title := generateTaskTitle(draft.OriginalInput, finalPrompt)
+
+	// 更新状态为 confirmed
+	if err := s.repos.PromptDrafts.UpdateStatus(draft.ID, domain.PromptDraftStatusConfirmed); err != nil {
+		slog.Error("confirm prompt draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to confirm prompt draft")
+		return
+	}
+
+	// 创建 Run 和 Task
+	run, task, err := s.orch.CreateSimpleRun(
+		r.Context(),
+		draft.ProjectID,
+		title,
+		draft.OriginalInput,
+		finalPrompt,
+		draft.TaskType,
+	)
+	if err != nil {
+		slog.Error("create simple run from draft", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to create run")
+		return
+	}
+
+	// 更新状态为 sent
+	if err := s.repos.PromptDrafts.UpdateStatus(draft.ID, domain.PromptDraftStatusSent); err != nil {
+		slog.Error("mark draft as sent", "error", err)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"draft_id": draft.ID,
+		"run_id":   run.ID,
+		"task_id":  task.ID,
+		"status":   "sent",
+	})
+}
+
+// generateTaskTitle 从原始输入和最终提示词生成任务标题。
+func generateTaskTitle(originalInput, finalPrompt string) string {
+	// 优先从 finalPrompt 提取第一行非空内容
+	for _, line := range strings.Split(finalPrompt, "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "#") && !strings.HasPrefix(line, "##") {
+			if len(line) > 80 {
+				return line[:80] + "..."
+			}
+			return line
+		}
+	}
+	// 回退到原始输入前 50 字符
+	input := strings.TrimSpace(originalInput)
+	if len(input) > 50 {
+		return input[:50] + "..."
+	}
+	return input
+}
+
+// handleListPromptDrafts 处理列出提示词草稿的请求。
+// 支持按 project_id 过滤。
+func (s *Server) handleListPromptDrafts(w http.ResponseWriter, r *http.Request) {
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		writeError(w, http.StatusBadRequest, "project_id query parameter is required")
+		return
+	}
+
+	drafts, err := s.repos.PromptDrafts.ListByProject(projectID)
+	if err != nil {
+		slog.Error("list prompt drafts", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list prompt drafts")
+		return
+	}
+	if drafts == nil {
+		drafts = []*domain.PromptDraft{}
+	}
+	writeJSON(w, http.StatusOK, drafts)
+}
+
+// handleApproveGate 处理通过门禁的请求。
+// POST /api/gates/{id}/approve
+func (s *Server) handleApproveGate(w http.ResponseWriter, r *http.Request) {
+	gateID := r.PathValue("id")
+	if gateID == "" {
+		writeError(w, http.StatusBadRequest, "gate id is required")
+		return
+	}
+
+	var req struct {
+		ApprovedBy string `json:"approved_by"`
+	}
+	readJSON(r, &req)
+	if req.ApprovedBy == "" {
+		req.ApprovedBy = "user"
+	}
+
+	if err := s.orch.ApproveGate(r.Context(), gateID, req.ApprovedBy); err != nil {
+		slog.Error("approve gate", "gate_id", gateID, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to approve gate: "+err.Error())
+		return
+	}
+
+	gate, _ := s.repos.Gates.GetByID(gateID)
+	writeJSON(w, http.StatusOK, gate)
+}
+
+// handleListGates 处理列出门禁的请求。
+// 支持按 run_id 过滤。
+func (s *Server) handleListGates(w http.ResponseWriter, r *http.Request) {
+	runID := r.URL.Query().Get("run_id")
+	if runID == "" {
+		writeError(w, http.StatusBadRequest, "run_id query parameter is required")
+		return
+	}
+
+	gates, err := s.repos.Gates.ListByRun(runID)
+	if err != nil {
+		slog.Error("list gates", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to list gates")
+		return
+	}
+	if gates == nil {
+		gates = []*domain.Gate{}
+	}
+	writeJSON(w, http.StatusOK, gates)
+}
+
+// handleGetGate 处理获取单个门禁的请求。
+func (s *Server) handleGetGate(w http.ResponseWriter, r *http.Request) {
+	gateID := r.PathValue("id")
+	if gateID == "" {
+		writeError(w, http.StatusBadRequest, "gate id is required")
+		return
+	}
+
+	gate, err := s.repos.Gates.GetByID(gateID)
+	if err != nil {
+		slog.Error("get gate", "gate_id", gateID, "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to get gate")
+		return
+	}
+	if gate == nil {
+		writeError(w, http.StatusNotFound, "gate not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, gate)
 }

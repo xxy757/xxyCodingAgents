@@ -73,6 +73,8 @@ func (db *DB) RunMigrations() error {
 		{"agent_specs", migrateAgentSpecs},
 		{"workflow_templates", migrateWorkflowTemplates},
 		{"indexes", migrateIndexes},
+		{"prompt_drafts", migratePromptDrafts},
+		{"gates", migrateGates},
 	}
 
 	for i, m := range migrations {
@@ -330,3 +332,37 @@ CREATE INDEX IF NOT EXISTS idx_resource_snapshots_created ON resource_snapshots(
 CREATE INDEX IF NOT EXISTS idx_command_logs_task_created ON command_logs(task_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_checkpoints_task_created ON checkpoints(task_id, created_at DESC);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_external_key ON runs(external_key) WHERE external_key != '';`
+
+// migratePromptDrafts 创建提示词草稿表
+const migratePromptDrafts = `
+CREATE TABLE IF NOT EXISTS prompt_drafts (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    original_input TEXT NOT NULL,
+    generated_prompt TEXT NOT NULL DEFAULT '',
+    final_prompt TEXT NOT NULL DEFAULT '',
+    task_type TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'draft',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+CREATE INDEX IF NOT EXISTS idx_prompt_drafts_project_status ON prompt_drafts(project_id, status, created_at);`
+
+// migrateGates 创建质量门禁表
+const migrateGates = `
+CREATE TABLE IF NOT EXISTS gates (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    gate_type TEXT NOT NULL DEFAULT 'auto',
+    status TEXT NOT NULL DEFAULT 'pending',
+    config_json TEXT NOT NULL DEFAULT '{}',
+    verify_result TEXT NOT NULL DEFAULT '',
+    approved_by TEXT NOT NULL DEFAULT '',
+    approved_at DATETIME,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (run_id) REFERENCES runs(id)
+);
+CREATE INDEX IF NOT EXISTS idx_gates_run_status ON gates(run_id, status);`

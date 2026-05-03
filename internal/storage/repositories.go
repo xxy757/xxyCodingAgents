@@ -268,6 +268,22 @@ func (r *TaskRepo) UpdateQueueStatus(id string, queueStatus string) error {
 	return err
 }
 
+// UpdateOutput 更新任务的输出数据。
+func (r *TaskRepo) UpdateOutput(id string, outputData string) error {
+	_, err := r.db.Exec(
+		"UPDATE tasks SET output_data = ?, updated_at = ? WHERE id = ?", outputData, time.Now(), id,
+	)
+	return err
+}
+
+// UpdateInputData 更新任务的输入数据。
+func (r *TaskRepo) UpdateInputData(id string, inputData string) error {
+	_, err := r.db.Exec(
+		"UPDATE tasks SET input_data = ?, updated_at = ? WHERE id = ?", inputData, time.Now(), id,
+	)
+	return err
+}
+
 // MaxAttemptNo 查询指定运行和任务类型的最大尝试次数。
 func (r *TaskRepo) MaxAttemptNo(runID string, taskType string) (int, error) {
 	var maxAttempt sql.NullInt64
@@ -877,6 +893,208 @@ func (r *WorkflowTemplateRepo) List() ([]*domain.WorkflowTemplate, error) {
 	return templates, nil
 }
 
+// ==================== PromptDraftRepo ====================
+
+// PromptDraftRepo 提供提示词草稿实体的数据访问操作。
+type PromptDraftRepo struct {
+	db *DB
+}
+
+// NewPromptDraftRepo 创建提示词草稿仓库实例。
+func NewPromptDraftRepo(db *DB) *PromptDraftRepo {
+	return &PromptDraftRepo{db: db}
+}
+
+// Create 插入一个新的提示词草稿记录。
+func (r *PromptDraftRepo) Create(d *domain.PromptDraft) error {
+	_, err := r.db.Exec(
+		"INSERT INTO prompt_drafts (id, project_id, original_input, generated_prompt, final_prompt, task_type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		d.ID, d.ProjectID, d.OriginalInput, d.GeneratedPrompt, d.FinalPrompt, d.TaskType, d.Status, d.CreatedAt, d.UpdatedAt,
+	)
+	return err
+}
+
+// GetByID 根据 ID 查询提示词草稿，未找到时返回 nil。
+func (r *PromptDraftRepo) GetByID(id string) (*domain.PromptDraft, error) {
+	d := &domain.PromptDraft{}
+	err := r.db.QueryRow(
+		"SELECT id, project_id, original_input, generated_prompt, final_prompt, task_type, status, created_at, updated_at FROM prompt_drafts WHERE id = ?", id,
+	).Scan(&d.ID, &d.ProjectID, &d.OriginalInput, &d.GeneratedPrompt, &d.FinalPrompt, &d.TaskType, &d.Status, &d.CreatedAt, &d.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return d, err
+}
+
+// ListByProject 查询指定项目的所有草稿，按创建时间降序排列。
+func (r *PromptDraftRepo) ListByProject(projectID string) ([]*domain.PromptDraft, error) {
+	rows, err := r.db.Query(
+		"SELECT id, project_id, original_input, generated_prompt, final_prompt, task_type, status, created_at, updated_at FROM prompt_drafts WHERE project_id = ? ORDER BY created_at DESC", projectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var drafts []*domain.PromptDraft
+	for rows.Next() {
+		d := &domain.PromptDraft{}
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.OriginalInput, &d.GeneratedPrompt, &d.FinalPrompt, &d.TaskType, &d.Status, &d.CreatedAt, &d.UpdatedAt); err != nil {
+			return nil, err
+		}
+		drafts = append(drafts, d)
+	}
+	return drafts, nil
+}
+
+// Update 更新提示词草稿的 final_prompt、status 和 updated_at。
+func (r *PromptDraftRepo) Update(d *domain.PromptDraft) error {
+	_, err := r.db.Exec(
+		"UPDATE prompt_drafts SET final_prompt = ?, status = ?, task_type = ?, updated_at = ? WHERE id = ?",
+		d.FinalPrompt, d.Status, d.TaskType, d.UpdatedAt, d.ID,
+	)
+	return err
+}
+
+// UpdateStatus 更新提示词草稿的状态和更新时间。
+func (r *PromptDraftRepo) UpdateStatus(id string, status domain.PromptDraftStatus) error {
+	_, err := r.db.Exec(
+		"UPDATE prompt_drafts SET status = ?, updated_at = ? WHERE id = ?",
+		status, time.Now(), id,
+	)
+	return err
+}
+
+// ==================== GateRepo ====================
+
+// GateRepo 提供质量门禁实体的数据访问操作。
+type GateRepo struct {
+	db *DB
+}
+
+// NewGateRepo 创建门禁仓库实例。
+func NewGateRepo(db *DB) *GateRepo {
+	return &GateRepo{db: db}
+}
+
+// Create 插入一个新的门禁记录。
+func (r *GateRepo) Create(g *domain.Gate) error {
+	_, err := r.db.Exec(
+		"INSERT INTO gates (id, run_id, node_id, gate_type, status, config_json, verify_result, approved_by, approved_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		g.ID, g.RunID, g.NodeID, g.GateType, g.Status, g.ConfigJSON, g.VerifyResult, g.ApprovedBy, g.ApprovedAt, g.CreatedAt, g.UpdatedAt,
+	)
+	return err
+}
+
+// GetByID 根据 ID 查询门禁，未找到时返回 nil。
+func (r *GateRepo) GetByID(id string) (*domain.Gate, error) {
+	g := &domain.Gate{}
+	var approvedAt sql.NullTime
+	err := r.db.QueryRow(
+		"SELECT id, run_id, node_id, gate_type, status, config_json, verify_result, approved_by, approved_at, created_at, updated_at FROM gates WHERE id = ?", id,
+	).Scan(&g.ID, &g.RunID, &g.NodeID, &g.GateType, &g.Status, &g.ConfigJSON, &g.VerifyResult, &g.ApprovedBy, &approvedAt, &g.CreatedAt, &g.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if approvedAt.Valid {
+		g.ApprovedAt = &approvedAt.Time
+	}
+	return g, err
+}
+
+// GetByRunAndNode 根据运行 ID 和节点 ID 查询门禁。
+func (r *GateRepo) GetByRunAndNode(runID, nodeID string) (*domain.Gate, error) {
+	g := &domain.Gate{}
+	var approvedAt sql.NullTime
+	err := r.db.QueryRow(
+		"SELECT id, run_id, node_id, gate_type, status, config_json, verify_result, approved_by, approved_at, created_at, updated_at FROM gates WHERE run_id = ? AND node_id = ?", runID, nodeID,
+	).Scan(&g.ID, &g.RunID, &g.NodeID, &g.GateType, &g.Status, &g.ConfigJSON, &g.VerifyResult, &g.ApprovedBy, &approvedAt, &g.CreatedAt, &g.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if approvedAt.Valid {
+		g.ApprovedAt = &approvedAt.Time
+	}
+	return g, err
+}
+
+// ListByRun 查询指定运行的所有门禁，按创建时间升序。
+func (r *GateRepo) ListByRun(runID string) ([]*domain.Gate, error) {
+	rows, err := r.db.Query(
+		"SELECT id, run_id, node_id, gate_type, status, config_json, verify_result, approved_by, approved_at, created_at, updated_at FROM gates WHERE run_id = ? ORDER BY created_at ASC", runID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var gates []*domain.Gate
+	for rows.Next() {
+		g := &domain.Gate{}
+		var approvedAt sql.NullTime
+		if err := rows.Scan(&g.ID, &g.RunID, &g.NodeID, &g.GateType, &g.Status, &g.ConfigJSON, &g.VerifyResult, &g.ApprovedBy, &approvedAt, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if approvedAt.Valid {
+			g.ApprovedAt = &approvedAt.Time
+		}
+		gates = append(gates, g)
+	}
+	return gates, nil
+}
+
+// ListPendingByRun 查询指定运行中所有待处理的门禁。
+func (r *GateRepo) ListPendingByRun(runID string) ([]*domain.Gate, error) {
+	rows, err := r.db.Query(
+		"SELECT id, run_id, node_id, gate_type, status, config_json, verify_result, approved_by, approved_at, created_at, updated_at FROM gates WHERE run_id = ? AND status = ? ORDER BY created_at ASC", runID, domain.GateStatusPending,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var gates []*domain.Gate
+	for rows.Next() {
+		g := &domain.Gate{}
+		var approvedAt sql.NullTime
+		if err := rows.Scan(&g.ID, &g.RunID, &g.NodeID, &g.GateType, &g.Status, &g.ConfigJSON, &g.VerifyResult, &g.ApprovedBy, &approvedAt, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, err
+		}
+		if approvedAt.Valid {
+			g.ApprovedAt = &approvedAt.Time
+		}
+		gates = append(gates, g)
+	}
+	return gates, nil
+}
+
+// UpdateStatus 更新门禁的状态和更新时间。
+func (r *GateRepo) UpdateStatus(id string, status domain.GateStatus) error {
+	_, err := r.db.Exec(
+		"UPDATE gates SET status = ?, updated_at = ? WHERE id = ?",
+		status, time.Now(), id,
+	)
+	return err
+}
+
+// Approve 通过门禁，设置状态为 passed、审批人和审批时间。
+func (r *GateRepo) Approve(id string, approvedBy string) error {
+	now := time.Now()
+	_, err := r.db.Exec(
+		"UPDATE gates SET status = ?, approved_by = ?, approved_at = ?, updated_at = ? WHERE id = ?",
+		domain.GateStatusPassed, approvedBy, now, now, id,
+	)
+	return err
+}
+
+// UpdateVerifyResult 更新门禁的验证结果和状态。
+func (r *GateRepo) UpdateVerifyResult(id string, result string, status domain.GateStatus) error {
+	_, err := r.db.Exec(
+		"UPDATE gates SET verify_result = ?, status = ?, updated_at = ? WHERE id = ?",
+		result, status, time.Now(), id,
+	)
+	return err
+}
+
 // ==================== Repos 聚合 ====================
 
 // Repos 是所有数据仓库的聚合容器，提供统一的访问入口。
@@ -894,6 +1112,8 @@ type Repos struct {
 	TaskSpecs         *TaskSpecRepo
 	AgentSpecs        *AgentSpecRepo
 	WorkflowTemplates *WorkflowTemplateRepo
+	PromptDrafts      *PromptDraftRepo
+	Gates             *GateRepo
 }
 
 // NewRepos 创建并初始化所有数据仓库。
@@ -912,6 +1132,8 @@ func NewRepos(db *DB) *Repos {
 		TaskSpecs:         NewTaskSpecRepo(db),
 		AgentSpecs:        NewAgentSpecRepo(db),
 		WorkflowTemplates: NewWorkflowTemplateRepo(db),
+		PromptDrafts:      NewPromptDraftRepo(db),
+		Gates:             NewGateRepo(db),
 	}
 }
 

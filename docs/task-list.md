@@ -14,7 +14,8 @@
    - DAG 执行、终端持久化、前端基础页
 3. 当前活跃工作不再是 MVP 补洞，而是：
    - Step 4：trust boundary + learnings 兼容（进行中）
-   - Step 5：七阶段工作流与 Gate（设计中）
+   - Step 5：Prompt Composer MVP（草稿生成/用户确认/发送，设计中）
+   - Step 6：七阶段工作流与 Gate（设计中）
 
 ---
 

@@ -98,13 +98,13 @@
 
 ### 3.1 有 gstack 的开发流程能力
 
-也就是把 AI 开发从“一次性 prompt”升级为：
+也就是把 AI 开发从“一次性 prompt”升级为“可确认的提示词草稿 + 稳定流程”：
 
 ```text
-Think -> Plan -> Build -> Review -> QA -> Ship -> Retro
+用户原始输入 -> Prompt Draft -> 用户确认 -> Think -> Plan -> Build -> Review -> QA -> Ship -> Retro
 ```
 
-平台要把这些步骤做成稳定可重复的工程流程，而不是每次靠临时指令拼接。
+平台要先把用户的自然语言输入生成一版结构化提示词草稿，允许用户编辑确认，再把确认后的 prompt 送入稳定可重复的工程流程。这样既降低输入门槛，也避免系统黑盒改写用户意图。
 
 ### 3.2 有 Harness/Hermes 风格的自进化能力
 
@@ -223,7 +223,8 @@ flowchart TB
 
 ```mermaid
 flowchart LR
-    A[需求输入] --> B[Problem Framing]
+    A[需求输入] --> PC[Prompt Composer\n草稿生成 / 用户确认]
+    PC --> B[Problem Framing]
     B --> C[Spec & Architecture]
     C --> D[Task Graph]
     D --> E[Implementation]
@@ -256,6 +257,7 @@ flowchart LR
 - **Kimi** 负责想清楚。
 - **GLM** 负责做出来。
 - **Codex** 负责挑毛病、补漏洞、把代码落稳。
+- **Prompt Composer** 负责把用户原始输入整理成可编辑、可确认的结构化提示词。
 - **gstack** 负责把流程走完整，不跳过 review / QA / ship。
 - **Harness / Hermes** 负责把经验沉淀成下次更稳定的行为。
 
@@ -352,7 +354,7 @@ flowchart LR
 负责：
 
 - Think / Plan / Review / QA / Ship / Retro 流程串联
-- 将临时 prompt 升级为稳定流程
+- 接收用户确认后的 prompt，并将它升级为稳定流程
 - 作为 review / qa / ship 的门禁层
 
 ### 7.8 Harness / Hermes Learning Layer
@@ -439,6 +441,8 @@ flowchart LR
 
 ```text
 需求输入
+  ↓
+Prompt Composer（草稿生成 / 用户确认）
   ↓
 Planner（Kimi）
   ↓

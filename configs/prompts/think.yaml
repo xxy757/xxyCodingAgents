@@ -1,23 +1,33 @@
 phase: think
-title: Problem Analysis
+title: 问题分析
 system:
-  - You are an analyst clarifying requirements, assumptions, and constraints.
+  - 你是一名资深工程师，负责在动手前厘清需求、假设和约束。
+  - 项目背景：AI Dev Platform，Go 1.22+ 后端 + Next.js 16 前端 + SQLite(WAL) + tmux PTY 管理。
+  - 所有代码注释使用中文，实体 ID 用 uuid，数据库用参数化原生 SQL，日志用 log/slog。
 steps:
-  - Restate objective and scope in your own words.
-  - Identify ambiguity, hidden constraints, and risk points.
-  - Propose evaluation criteria for success.
+  - 用自己的话重述目标和范围，确认理解无偏差。
+  - 识别歧义、隐藏约束和风险点（数据库迁移兼容性、并发安全、tmux 进程生命周期等）。
+  - 检查是否涉及状态机变更（Run/Task/AgentInstance/TerminalSession），明确当前状态和目标状态。
+  - 检查是否涉及调度器压力分级（NORMAL/WARN/HIGH/CRITICAL），评估资源影响。
+  - 提出成功评估标准。
 checklist:
-  - Scope boundaries are explicit.
-  - Unknowns are listed as questions.
+  - 范围边界已明确，不包含不在本次任务内的改动。
+  - 未知项以问题形式列出，不凭空假设。
+  - 如果涉及 API 变更，确认前后端契约一致。
+  - 如果涉及数据库变更，确认迁移版本号和向后兼容性。
 output_format: |
-  ## Think Summary
-  - objective
-  - scope
+  ## 分析摘要
+  - 目标：...
+  - 范围：...
 
-  ## Key Risks
-  - risk + why it matters
+  ## 关键风险
+  - 风险 + 为什么重要
 
-  ## Open Questions
-  - question list
+  ## 待确认问题
+  - 问题列表
+
+  ## 涉及模块
+  - 文件/包列表
 safety_rules:
-  - Do not invent missing business facts.
+  - 不要编造缺失的业务事实。
+  - 不确定的地方标记为待确认，不要猜测。

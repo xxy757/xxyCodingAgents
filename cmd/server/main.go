@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"log/slog"
 	"net/http"
@@ -12,8 +13,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/google/uuid"
 	"github.com/xxy757/xxyCodingAgents/internal/api"
 	"github.com/xxy757/xxyCodingAgents/internal/config"
+	"github.com/xxy757/xxyCodingAgents/internal/domain"
 	"github.com/xxy757/xxyCodingAgents/internal/orchestrator"
 	agentruntime "github.com/xxy757/xxyCodingAgents/internal/runtime"
 	"github.com/xxy757/xxyCodingAgents/internal/scheduler"
@@ -62,6 +65,9 @@ func main() {
 
 	// 初始化数据仓库集合
 	repos := storage.NewRepos(db)
+
+	// 插入默认的七阶段工作流模板（如果不存在）
+	seedDefaultWorkflowTemplate(repos)
 
 	// 初始化 tmux 终端会话管理器
 	termMgr := terminal.NewManager()
@@ -122,4 +128,85 @@ func main() {
 	cancel()
 	sched.Stop()
 	watchdog.Stop()
+}
+
+// seedDefaultWorkflowTemplate 插入默认的七阶段工作流模板。
+// 如果已存在同名模板则跳过。包含 7 个任务节点和 6 个门禁节点。
+func seedDefaultWorkflowTemplate(repos *storage.Repos) {
+	const templateName = "7-phase-default"
+
+	// 检查是否已存在
+	templates, err := repos.WorkflowTemplates.List()
+	if err != nil {
+		slog.Error("list workflow templates for seed", "error", err)
+		return
+	}
+	for _, t := range templates {
+		if t.Name == templateName {
+			return // 已存在，跳过
+		}
+	}
+
+	// 定义节点：7 个任务 + 6 个门禁
+	nodes := []domain.WorkflowNode{
+		{ID: "n1", TaskSpecID: "think-spec", Label: "思考分析", Kind: "task"},
+		{ID: "n2", Label: "思考→规划检查", Kind: "gate", Config: `{"type":"auto","verify_command":"go vet ./..."}`},
+		{ID: "n3", TaskSpecID: "plan-spec", Label: "方案设计", Kind: "task"},
+		{ID: "n4", Label: "规划确认", Kind: "gate", Config: `{"type":"manual","prompt":"请确认方案设计是否可行"}`},
+		{ID: "n5", TaskSpecID: "build-spec", Label: "代码实现", Kind: "task"},
+		{ID: "n6", Label: "构建验证", Kind: "gate", Config: `{"type":"auto","verify_command":"go test ./... && go vet ./..."}`},
+		{ID: "n7", TaskSpecID: "review-spec", Label: "代码审查", Kind: "task"},
+		{ID: "n8", Label: "审查通过", Kind: "gate", Config: `{"type":"auto","verify_command":"go vet ./..."}`},
+		{ID: "n9", TaskSpecID: "qa-spec", Label: "质量验证", Kind: "task"},
+		{ID: "n10", Label: "QA 确认", Kind: "gate", Config: `{"type":"manual","prompt":"QA 验证是否通过？"}`},
+		{ID: "n11", TaskSpecID: "ship-spec", Label: "发布部署", Kind: "task"},
+		{ID: "n12", Label: "发布检查", Kind: "gate", Config: `{"type":"auto","verify_command":"go test ./..."}`},
+		{ID: "n13", TaskSpecID: "retro-spec", Label: "回顾总结", Kind: "task"},
+	}
+
+	// 定义边：线性链 n1→n2→...→n13
+	edges := []domain.WorkflowEdge{
+		{From: "n1", To: "n2"}, {From: "n2", To: "n3"}, {From: "n3", To: "n4"},
+		{From: "n4", To: "n5"}, {From: "n5", To: "n6"}, {From: "n6", To: "n7"},
+		{From: "n7", To: "n8"}, {From: "n8", To: "n9"}, {From: "n9", To: "n10"},
+		{From: "n10", To: "n11"}, {From: "n11", To: "n12"}, {From: "n12", To: "n13"},
+	}
+
+	nodesJSON, _ := json.Marshal(nodes)
+	edgesJSON, _ := json.Marshal(edges)
+
+	template := &domain.WorkflowTemplate{
+		ID:          uuid.New().String(),
+		Name:        templateName,
+		Description: "七阶段开发工作流：思考→规划→构建→审查→QA→发布→回顾",
+		NodesJSON:   string(nodesJSON),
+		EdgesJSON:   string(edgesJSON),
+		OnFailure:   "abort",
+	}
+
+	if err := repos.WorkflowTemplates.Create(template); err != nil {
+		slog.Error("seed default workflow template", "error", err)
+		return
+	}
+	slog.Info("seeded default workflow template", "id", template.ID, "name", templateName, "nodes", len(nodes), "edges", len(edges))
+
+	// 同步创建 TaskSpec 种子数据（如果不存在）
+	specs := []domain.TaskSpec{
+		{ID: "think-spec", Name: "思考分析", TaskType: "think", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassLight, CanPause: true, CanCheckpoint: true},
+		{ID: "plan-spec", Name: "方案设计", TaskType: "plan", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassLight, CanPause: true, CanCheckpoint: true},
+		{ID: "build-spec", Name: "代码实现", TaskType: "build", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassMedium, CanPause: true, CanCheckpoint: true},
+		{ID: "review-spec", Name: "代码审查", TaskType: "review", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassLight, CanPause: true, CanCheckpoint: true},
+		{ID: "qa-spec", Name: "质量验证", TaskType: "qa", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassMedium, CanPause: true, CanCheckpoint: true},
+		{ID: "ship-spec", Name: "发布部署", TaskType: "ship", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassLight, CanPause: true, CanCheckpoint: true},
+		{ID: "retro-spec", Name: "回顾总结", TaskType: "retro", RuntimeType: "claude-code", ResourceClass: domain.ResourceClassLight, CanPause: true, CanCheckpoint: true},
+	}
+	for i := range specs {
+		specs[i].TimeoutSeconds = 600
+		specs[i].RetryPolicy = "never"
+		if existing, _ := repos.TaskSpecs.GetByID(specs[i].ID); existing == nil {
+			if err := repos.TaskSpecs.Create(&specs[i]); err != nil {
+				slog.Warn("seed task spec", "id", specs[i].ID, "error", err)
+			}
+		}
+	}
 }

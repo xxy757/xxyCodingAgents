@@ -91,6 +91,17 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("GET /api/agent-specs", s.handleListAgentSpecs)
 	s.mux.HandleFunc("GET /api/workflow-templates", s.handleListWorkflowTemplates)
 	s.mux.HandleFunc("POST /api/workflow-templates", s.handleCreateWorkflowTemplate)
+
+	// 提示词草稿 API
+	s.mux.HandleFunc("POST /api/prompt-drafts/generate", s.handleGeneratePromptDraft)
+	s.mux.HandleFunc("GET /api/prompt-drafts", s.handleListPromptDrafts)
+	s.mux.HandleFunc("PUT /api/prompt-drafts/{id}", s.handleUpdatePromptDraft)
+	s.mux.HandleFunc("POST /api/prompt-drafts/{id}/send", s.handleSendPromptDraft)
+
+	// 质量门禁 API
+	s.mux.HandleFunc("POST /api/gates/{id}/approve", s.handleApproveGate)
+	s.mux.HandleFunc("GET /api/gates", s.handleListGates)
+	s.mux.HandleFunc("GET /api/gates/{id}", s.handleGetGate)
 }
 
 // Handler 返回包装了 CORS 和日志中间件的 HTTP Handler。

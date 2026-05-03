@@ -3,18 +3,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiFetch } from "@/lib/api";
-
-// AgentInstance Agent 实例数据接口
-interface AgentInstance {
-  id: string;
-  run_id: string;
-  task_id: string;
-  agent_kind: string;
-  status: string;
-  tmux_session: string;
-  created_at: string;
-}
+import { apiFetch, type AgentInstance } from "@/lib/api";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // AgentsPage Agent 管理页面组件
 export default function AgentsPage() {
@@ -79,20 +69,7 @@ export default function AgentsPage() {
                 <td className="py-2 text-sm font-mono">{agent.id.slice(0, 8)}</td>
                 <td className="py-2 text-sm">{agent.agent_kind}</td>
                 <td className="py-2 text-sm">
-                  {/* 根据状态显示不同颜色的标签 */}
-                  <span
-                    className={`px-2 py-0.5 rounded text-xs font-medium ${
-                      agent.status === "running"
-                        ? "bg-green-100 text-green-700"
-                        : agent.status === "paused"
-                        ? "bg-yellow-100 text-yellow-700"
-                        : agent.status === "stopped" || agent.status === "failed"
-                        ? "bg-red-100 text-red-700"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    {agent.status}
-                  </span>
+                  <StatusBadge status={agent.status} />
                 </td>
                 <td className="py-2 text-sm font-mono">{agent.tmux_session || "-"}</td>
                 <td className="py-2 text-sm">{new Date(agent.created_at).toLocaleString()}</td>

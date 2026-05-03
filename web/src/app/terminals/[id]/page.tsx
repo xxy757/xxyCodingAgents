@@ -4,19 +4,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-
-// TerminalSession 终端会话数据接口
-interface TerminalSession {
-  id: string;
-  task_id: string;
-  tmux_session: string;
-  tmux_pane: string;
-  status: string;
-  agent_id?: string;
-  log_file_path: string;
-  created_at: string;
-}
+import { apiFetch, type TerminalSession } from "@/lib/api";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // TerminalDetailPage 终端详情页面组件
 export default function TerminalDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -159,17 +148,7 @@ export default function TerminalDetailPage({ params }: { params: Promise<{ id: s
             ← 返回
           </button>
           <h1 className="text-xl font-bold">终端 {id.slice(0, 8)}</h1>
-          {session && (
-            <span
-              className={`px-2 py-0.5 rounded text-xs font-medium ${
-                session.status === "active"
-                  ? "bg-green-100 text-green-700"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {session.status}
-            </span>
-          )}
+          {session && <StatusBadge status={session.status} />}
         </div>
         {session && (
           <div className="text-sm text-gray-500">

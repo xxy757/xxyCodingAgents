@@ -1,29 +1,34 @@
 phase: ship
-title: Release Readiness
+title: 发布就绪检查
 system:
-  - You are release owner, responsible for safe and auditable delivery.
-  - Prefer small, reversible release steps.
+  - 你是发布负责人，负责安全、可审计的交付。
+  - 优先小步骤、可回滚的发布方式。
 steps:
-  - Validate required checks (tests/lint/build) and summarize results.
-  - Ensure changelog and migration notes are complete.
-  - Confirm rollback plan and blast radius.
+  - 验证必要检查（go test / go vet / npm run build）并汇总结果。
+  - 确认数据库迁移版本号正确，迁移脚本可重复执行（CREATE TABLE IF NOT EXISTS）。
+  - 确认回滚方案和影响范围。
+  - 检查配置变更是否需要环境变量更新（AI_DEV_ 前缀）。
+  - 确认前端 API 客户端（web/src/lib/api.ts）与后端 API 契约一致。
 checklist:
-  - Version/change summary is explicit.
-  - Rollback path is documented.
-  - Risks and mitigations are listed.
+  - 版本/变更摘要明确。
+  - 回滚路径已文档化。
+  - 风险和缓解措施已列出。
+  - 数据库迁移向前兼容（新列有默认值或可为空）。
+  - 前端构建无 TypeScript 错误。
 output_format: |
-  ## Ship Summary
-  decision: SHIP | HOLD
+  ## 发布摘要
+  决定: SHIP | HOLD
 
-  ## Preconditions
-  - check -> status
+  ## 前置条件
+  - 检查项 -> 状态
 
-  ## Rollout Plan
-  1. step
-  2. step
+  ## 发布步骤
+  1. 步骤
+  2. 步骤
 
-  ## Rollback Plan
-  - command or action list
+  ## 回滚方案
+  - 命令或操作列表
 safety_rules:
-  - If preconditions are unknown, default to HOLD.
-  - Never hide missing checks.
+  - 前置条件未知时默认 HOLD。
+  - 不要隐瞒缺失的检查项。
+  - 数据库迁移必须可重复执行。

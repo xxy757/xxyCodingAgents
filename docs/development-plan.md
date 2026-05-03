@@ -10,7 +10,7 @@
 > - gstack 集成 Step 2 已完成：workspace 级 browse CLI + wrapper + smoke 脚本已落地（scheduler 全链路需 tmux 环境复核）
 > - gstack 集成 Step 3 已完成：PromptEngine + phase YAML + scheduler 注入链已落地
 > - gstack 集成 Step 4 进行中：已完成 learnings JSONL 检索注入 + QA trust-boundary + 失败链路自动写入 + canary 泄漏检测
-> - 当前后续阶段：Step 4 收尾（检索降噪/可视化）与 Step 5（Gate 工作流）
+> - 当前后续阶段：Step 4 收尾（检索降噪/可视化）、Step 5 Prompt Composer MVP（草稿生成/用户确认/发送）、Step 6 Gate 工作流
 
 ## 阶段一：项目基础搭建
 

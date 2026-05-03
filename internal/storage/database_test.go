@@ -32,7 +32,7 @@ func TestRunMigrations(t *testing.T) {
 		"workspaces", "terminal_sessions", "checkpoints",
 		"resource_snapshots", "events", "command_logs",
 		"task_specs", "agent_specs", "workflow_templates",
-		"schema_migrations",
+		"prompt_drafts", "gates", "schema_migrations",
 	}
 
 	for _, table := range tables {
@@ -75,8 +75,8 @@ func TestCurrentVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version after migration: %v", err)
 	}
-	if v != 14 {
-		t.Errorf("expected version 14 after migration, got %d", v)
+	if v != 16 {
+		t.Errorf("expected version 16 after migration, got %d", v)
 	}
 }
 
@@ -127,5 +127,11 @@ func TestNewRepos(t *testing.T) {
 	}
 	if repos.WorkflowTemplates == nil {
 		t.Error("WorkflowTemplates repo should not be nil")
+	}
+	if repos.PromptDrafts == nil {
+		t.Error("PromptDrafts repo should not be nil")
+	}
+	if repos.Gates == nil {
+		t.Error("Gates repo should not be nil")
 	}
 }

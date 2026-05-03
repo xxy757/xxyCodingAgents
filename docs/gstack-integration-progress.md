@@ -13,7 +13,8 @@
 1. 浏览器 QA 执行层：复用 gstack `browse` 的 daemon + CLI 能力。
 2. 开发流程语义层：复用 gstack 的 `review / qa / ship / retro` 工作流思想。
 3. Prompt 注入层：借鉴 gstack 的阶段模板、上下文组织和信任边界。
-4. Learnings 层：兼容 gstack 的 `learnings.jsonl` 存储与检索模式。
+4. Prompt Composer 层：借鉴 Trae 风格的“用户输入 → 草稿生成 → 用户确认 → 发送”交互。
+5. Learnings 层：兼容 gstack 的 `learnings.jsonl` 存储与检索模式。
 
 明确不直接照搬的部分：
 
@@ -45,6 +46,7 @@
 | Prompt 进入 runtime | 已完成 | launcher script + prompt file 已打通 |
 | gstack browse | 已完成（基础版 + smoke） | workspace 级 daemon、env 注入、QA 并发约束已接通；已补可重复 smoke 脚本 |
 | PromptEngine | 已完成（Step 3） | 已落地 `internal/prompt/engine.go` + `configs/prompts/*.yaml`，`scheduler.buildPrompt()` 默认走模板引擎，失败回退 legacy |
+| Prompt Composer | 设计中（Step 5） | MVP 采用规则模板生成 Prompt Draft，用户确认 `final_prompt` 后再创建 Run / Task |
 | gstack learnings 兼容 | 进行中（Step 4） | 已落地 `internal/learning` JSONL 读写/检索并接入 Prompt Layer 3，同时失败链路可自动写入 learning |
 
 ---
@@ -59,7 +61,8 @@
 | Step 2 | workspace 级 gstack browse CLI 接入 | 已完成（基础版 + smoke） |
 | Step 3 | PromptEngine + phase YAML 模板 | 已完成 |
 | Step 4 | trust boundary + gstack learnings JSONL 兼容 | 进行中 |
-| Step 5 | 七阶段工作流与 Gate 机制 | 设计中 |
+| Step 5 | Prompt Composer MVP：草稿生成 + 用户确认 + 发送 | 设计中 |
+| Step 6 | 七阶段工作流与 Gate 机制 | 设计中 |
 
 ---
 
@@ -345,15 +348,78 @@ BuildPrompt(opts BuildOptions) (string, error)
 
 ---
 
-## 8. Step 5：七阶段工作流与 Gate
+## 8. Step 5：Prompt Composer MVP
+
+这一步属于用户入口层，目标是把“用户随手写一句需求”变成“用户确认后的结构化 prompt”，再进入现有 Run / Task / Scheduler 链路。
+
+### 8.1 目标
+
+1. 用户可以输入自然语言需求。
+2. 系统生成一版 Prompt Draft。
+3. 用户可以编辑、重新生成、确认发送。
+4. 只有确认后的 `final_prompt` 会创建 Run / Task。
+
+### 8.2 MVP 数据流
+
+```text
+original_input
+  -> POST /api/prompt-drafts/generate
+  -> generated_prompt
+  -> 用户编辑 final_prompt
+  -> PUT /api/prompt-drafts/{id}
+  -> POST /api/prompt-drafts/{id}/send
+  -> Run / Task
+  -> scheduler.buildPrompt()
+  -> PromptEngine 四层注入
+  -> launcher prompt.md
+```
+
+### 8.3 设计原则
+
+1. Prompt Draft 是 pre-run 草稿，不是 agent runtime prompt。
+2. PromptEngine 继续负责运行时 phase YAML、learnings、trust boundary、runtime state 注入。
+3. MVP 优先使用规则模板，不依赖外部 LLM 生成草稿。
+4. 用户确认动作必须显式发生，避免系统黑盒改写用户意图。
+
+### 8.4 MVP 草稿结构
+
+```text
+任务目标：
+上下文：
+执行要求：
+验收标准：
+输出要求：
+```
+
+### 8.5 首批任务类型
+
+1. bugfix：定位并修复错误
+2. build：实现功能或改造代码
+3. review：审查 diff 或指定文件
+4. qa：测试页面或工作流
+5. docs：更新文档
+6. architecture：分析架构或设计方案
+
+### 8.6 验收标准
+
+1. 首页能输入原始需求并生成 Prompt Draft。
+2. 用户编辑后的 `final_prompt` 可保存。
+3. 发送时创建 Run / Task，Task 输入取 `final_prompt` 而不是 `original_input`。
+4. 重新生成不会覆盖用户已确认发送的历史草稿。
+5. API 单测覆盖 generate / update / send 的状态转换。
+
+---
+
+## 9. Step 6：七阶段工作流与 Gate
 
 这一步不属于 runtime 基础设施，而属于更高层的工作流编排。
 
 当前判断：
 
 1. Step 2 和 Step 3 已完成，Step 4 已进入收尾阶段（安全边界 + learnings JSONL）。
-2. 再把 `think -> plan -> build -> review -> qa -> ship -> retro` 变成默认工作流模板。
-3. Gate 必须基于当前项目已有的 DAG 模型实现，不改成 `steps[]` 管道模型。
+2. Step 5 先补齐用户确认发送入口。
+3. 再把 `think -> plan -> build -> review -> qa -> ship -> retro` 变成默认工作流模板。
+4. Gate 必须基于当前项目已有的 DAG 模型实现，不改成 `steps[]` 管道模型。
 
 推荐做法：
 
@@ -363,24 +429,26 @@ BuildPrompt(opts BuildOptions) (string, error)
 
 ---
 
-## 9. 当前未决事项
+## 10. 当前未决事项
 
 1. `security_alert` 事件仍缺前端可视化与告警面板。
 2. learnings 的项目 slug 规则需进一步和 project/repo 标识严格对齐（当前为多级回退策略）。
 3. learnings 检索需做降噪与重复写入抑制（避免同类失败刷屏）。
-4. 需在 CI 或其他开发机复跑 `scripts/smoke-browse-qa.sh`，确保环境迁移后仍稳定通过。
+4. Prompt Draft 缺模型、迁移、Repository、API 和前端 Composer。
+5. 需在 CI 或其他开发机复跑 `scripts/smoke-browse-qa.sh`，确保环境迁移后仍稳定通过。
 
 ---
 
-## 10. 建议执行顺序
+## 11. 建议执行顺序
 
 1. 完成本文 Step 4 收尾：security_alert 可视化 + learnings 检索降噪。
-2. 再推进 Step 5：七阶段工作流和 Gate。
-3. 最后补 CI 稳定性验证与发布前回归脚本。
+2. 推进 Step 5：Prompt Composer MVP。
+3. 再推进 Step 6：七阶段工作流和 Gate。
+4. 最后补 CI 稳定性验证与发布前回归脚本。
 
 ---
 
-## 11. 文档关系
+## 12. 文档关系
 
 | 文档 | 角色 |
 |------|------|

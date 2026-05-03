@@ -3,16 +3,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiFetch } from "@/lib/api";
-
-// Project 项目数据接口
-interface Project {
-  id: string;
-  name: string;
-  repo_url: string;
-  description: string;
-  created_at: string;
-}
+import { apiFetch, type Project } from "@/lib/api";
 
 // ProjectsPage 项目管理页面组件
 export default function ProjectsPage() {

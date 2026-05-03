@@ -4,29 +4,8 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
-
-// Run 运行数据接口
-interface Run {
-  id: string;
-  project_id: string;
-  title: string;
-  status: string;
-  created_at: string;
-}
-
-// Project 项目数据接口
-interface Project {
-  id: string;
-  name: string;
-}
-
-// WorkflowTemplate 工作流模板接口
-interface WorkflowTemplate {
-  id: string;
-  name: string;
-  description: string;
-}
+import { apiFetch, type Run, type Project, type WorkflowTemplate } from "@/lib/api";
+import { StatusBadge } from "@/components/StatusBadge";
 
 // RunsPage 运行管理页面组件
 export default function RunsPage() {
@@ -84,22 +63,6 @@ export default function RunsPage() {
       setError(e.message);
     } finally {
       setCreating(false);
-    }
-  };
-
-  // statusColor 根据运行状态返回对应的样式类名
-  const statusColor = (status: string) => {
-    switch (status) {
-      case "running":
-        return "bg-green-100 text-green-700";
-      case "pending":
-        return "bg-yellow-100 text-yellow-700";
-      case "failed":
-        return "bg-red-100 text-red-700";
-      case "completed":
-        return "bg-blue-100 text-blue-700";
-      default:
-        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -196,9 +159,7 @@ export default function RunsPage() {
                 <td className="py-2 text-sm font-mono">{run.id.slice(0, 8)}</td>
                 <td className="py-2 text-sm">{run.title}</td>
                 <td className="py-2 text-sm">
-                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusColor(run.status)}`}>
-                    {run.status}
-                  </span>
+                  <StatusBadge status={run.status} />
                 </td>
                 <td className="py-2 text-sm">{new Date(run.created_at).toLocaleString()}</td>
                 <td className="py-2 text-sm">
