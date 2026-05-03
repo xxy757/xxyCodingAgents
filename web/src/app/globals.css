@@ -76,6 +76,9 @@
 body {
   color: var(--foreground);
   background: var(--background);
+  font-family: "Inter", "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ==================== 全局 focus-visible ==================== */
