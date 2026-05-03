@@ -163,6 +163,20 @@ export const draftStatusColors: Record<string, string> = {
   sent: 'bg-green-100 text-green-800',
 };
 
+// statusHex 将任务状态映射到十六进制颜色值（用于 ReactFlow 等需要 inline style 的场景）
+export const statusHex: Record<string, { border: string; bg: string }> = {
+  running:   { border: "#22c55e", bg: "#f0fdf4" },
+  completed: { border: "#3b82f6", bg: "#eff6ff" },
+  failed:    { border: "#ef4444", bg: "#fef2f2" },
+  queued:    { border: "#eab308", bg: "#fefce8" },
+  blocked:   { border: "#a855f7", bg: "#faf5ff" },
+  evicted:   { border: "#f97316", bg: "#fff7ed" },
+  pending:   { border: "#eab308", bg: "#fefce8" },
+  cancelled: { border: "#9ca3af", bg: "#f9fafb" },
+  stopped:   { border: "#9ca3af", bg: "#f9fafb" },
+  default:   { border: "#9ca3af", bg: "#f9fafb" },
+};
+
 // ==================== 提示词草稿 API ====================
 
 // generatePromptDraft 生成提示词草稿

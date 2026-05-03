@@ -5,7 +5,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, type Task, type Event, type Run, type Gate, approveGate, listGates } from "@/lib/api";
+import { apiFetch, type Task, type Event, type Run, type Gate, approveGate, listGates, statusHex } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import {
   ReactFlow,
@@ -31,44 +31,14 @@ interface WorkflowGraph {
   edges: { id: string; source: string; target: string }[];
 }
 
-// statusBorderColor 根据任务状态返回边框颜色
+// statusBorderColor 根据任务状态返回边框颜色（使用 api.ts 中的统一映射）
 function statusBorderColor(status: string): string {
-  switch (status) {
-    case "running":
-      return "#22c55e";
-    case "completed":
-      return "#3b82f6";
-    case "failed":
-      return "#ef4444";
-    case "queued":
-      return "#eab308";
-    case "blocked":
-      return "#a855f7";
-    case "evicted":
-      return "#f97316";
-    default:
-      return "#9ca3af";
-  }
+  return (statusHex[status] || statusHex.default).border;
 }
 
-// statusBgColor 根据任务状态返回背景颜色
+// statusBgColor 根据任务状态返回背景颜色（使用 api.ts 中的统一映射）
 function statusBgColor(status: string): string {
-  switch (status) {
-    case "running":
-      return "#f0fdf4";
-    case "completed":
-      return "#eff6ff";
-    case "failed":
-      return "#fef2f2";
-    case "queued":
-      return "#fefce8";
-    case "blocked":
-      return "#faf5ff";
-    case "evicted":
-      return "#fff7ed";
-    default:
-      return "#f9fafb";
-  }
+  return (statusHex[status] || statusHex.default).bg;
 }
 
 // TaskNode 是工作流图中的任务节点组件
