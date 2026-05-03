@@ -78,7 +78,7 @@ export default function AgentsPage() {
                   {agent.status === "running" && (
                     <button
                       onClick={() => handleAction(agent.id, "pause")}
-                      className="px-2 py-1 bg-yellow-500 text-white rounded text-xs hover:bg-yellow-600"
+                      className="px-3 py-2 bg-yellow-500 text-white rounded text-sm hover:bg-yellow-600 focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:outline-none"
                     >
                       暂停
                     </button>
@@ -87,7 +87,7 @@ export default function AgentsPage() {
                   {agent.status === "paused" && (
                     <button
                       onClick={() => handleAction(agent.id, "resume")}
-                      className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                      className="px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:outline-none"
                     >
                       恢复
                     </button>
@@ -96,7 +96,7 @@ export default function AgentsPage() {
                   {agent.status !== "stopped" && (
                     <button
                       onClick={() => handleAction(agent.id, "stop")}
-                      className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                      className="px-3 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:outline-none"
                     >
                       停止
                     </button>
