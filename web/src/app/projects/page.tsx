@@ -1,45 +1,44 @@
-// projects/page.tsx - 项目管理页面
-// 展示项目列表，支持创建新项目。
+// projects/page.tsx - 项目管理
+// 卡片网格展示项目列表，支持创建新项目。
 "use client";
 
 import { useState, useEffect } from "react";
 import { apiFetch, type Project } from "@/lib/api";
+import {
+  FolderNotchOpenIcon as FolderNotchOpen,
+  Plus,
+  GitBranch,
+  Clock,
+} from "@phosphor-icons/react/dist/ssr";
 
-// ProjectsPage 项目管理页面组件
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState("");
   const [repoUrl, setRepoUrl] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // 页面加载时获取项目列表
   useEffect(() => {
-    setLoading(true);
     apiFetch<Project[]>("/api/projects")
       .then(setProjects)
-      .catch((e) => {
-        setProjects([]);
-        setError(e.message);
-      })
+      .catch(() => setProjects([]))
       .finally(() => setLoading(false));
   }, []);
 
-  // handleCreate 处理创建项目表单提交
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCreating(true);
+    setError(null);
     try {
-      setCreating(true);
-      setError(null);
-      const project = await apiFetch<Project>("/api/projects", {
+      const p = await apiFetch<Project>("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, repo_url: repoUrl, description }),
       });
-      setProjects([project, ...projects]);
+      setProjects([p, ...projects]);
       setName("");
       setRepoUrl("");
       setDescription("");
@@ -52,103 +51,142 @@ export default function ProjectsPage() {
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">项目管理</h1>
+    <div className="space-y-6 animate-fade-up">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">项目</h1>
+          <p className="text-sm text-zinc-500 mt-1">管理你的代码项目</p>
+        </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+          className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium
+                     hover:bg-zinc-800 pressable transition-colors duration-200"
         >
+          <Plus className="w-4 h-4" />
           新建项目
         </button>
       </div>
 
       {error && (
-        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">
-          操作失败：{error}
+        <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-sm">
+          {error}
         </div>
       )}
 
-      {/* 新建项目表单 */}
       {showForm && (
-        <form onSubmit={handleCreate} className="mb-6 p-4 bg-neutral-50 rounded-lg border border-neutral-200 space-y-3">
-          <div>
-            <label htmlFor="project-name" className="block text-sm font-medium mb-1">项目名称</label>
-            <input
-              id="project-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
-              placeholder="输入项目名称"
-              required
-            />
+        <form onSubmit={handleCreate} className="card-bezel p-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 mb-1.5">项目名称</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm
+                           focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500 transition-all"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-zinc-500 mb-1.5">仓库地址</label>
+              <input
+                type="text"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                placeholder="https://github.com/..."
+                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm
+                           placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent-500/20
+                           focus:border-accent-500 transition-all"
+              />
+            </div>
           </div>
           <div>
-            <label htmlFor="project-repo" className="block text-sm font-medium mb-1">仓库 URL</label>
+            <label className="block text-xs font-medium text-zinc-500 mb-1.5">描述</label>
             <input
-              id="project-repo"
               type="text"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
-              placeholder="https://github.com/..."
-            />
-          </div>
-          <div>
-            <label htmlFor="project-desc" className="block text-sm font-medium mb-1">描述</label>
-            <textarea
-              id="project-desc"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              className="w-full border border-neutral-300 rounded-md px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
-              rows={3}
-              placeholder="项目描述"
+              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-2.5 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500 transition-all"
             />
           </div>
-          <button
-            type="submit"
-            disabled={creating}
-            className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
-          >
-            {creating ? "创建中..." : "创建"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={creating}
+              className="px-4 py-2.5 bg-accent-600 text-white rounded-xl text-sm font-medium
+                         hover:bg-accent-700 disabled:opacity-50 pressable transition-colors"
+            >
+              {creating ? "创建中..." : "创建"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-4 py-2.5 border border-zinc-200 rounded-xl text-sm text-zinc-600
+                         hover:bg-zinc-50 pressable transition-colors"
+            >
+              取消
+            </button>
+          </div>
         </form>
       )}
 
-      {/* 项目列表表格 */}
       {loading ? (
-        <div className="space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="skeleton h-12 w-full" />
+            <div key={i} className="card-bezel p-5">
+              <div className="skeleton h-4 w-24 mb-3" />
+              <div className="skeleton h-3 w-full mb-2" />
+              <div className="skeleton h-3 w-2/3" />
+            </div>
           ))}
         </div>
       ) : projects.length === 0 ? (
-        <p className="text-neutral-500">暂无项目</p>
+        <EmptyState />
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="border-b border-neutral-200 text-left text-sm text-neutral-600">
-                <th className="pb-2">ID</th>
-                <th className="pb-2">名称</th>
-                <th className="pb-2">仓库</th>
-                <th className="pb-2">创建时间</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((p) => (
-                <tr key={p.id} className="border-b border-neutral-100 hover:bg-neutral-50">
-                  <td className="py-2 text-sm font-mono">{p.id.slice(0, 8)}</td>
-                  <td className="py-2 text-sm font-medium">{p.name}</td>
-                  <td className="py-2 text-sm text-neutral-500">{p.repo_url || "-"}</td>
-                  <td className="py-2 text-sm">{new Date(p.created_at).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
+          {projects.map((p) => (
+            <div key={p.id} className="card-bezel p-5 group">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center shrink-0
+                                group-hover:bg-accent-50 transition-colors duration-200">
+                  <FolderNotchOpen className="w-4 h-4 text-zinc-500 group-hover:text-accent-600 transition-colors" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-semibold text-zinc-900 truncate">{p.name}</h3>
+                  {p.description && (
+                    <p className="text-xs text-zinc-500 mt-1 line-clamp-2">{p.description}</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-4 text-xs text-zinc-400">
+                {p.repo_url && (
+                  <span className="flex items-center gap-1">
+                    <GitBranch className="w-3 h-3" />
+                    {new URL(p.repo_url).pathname.slice(1)}
+                  </span>
+                )}
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  {new Date(p.created_at).toLocaleDateString("zh-CN")}
+                </span>
+              </div>
+            </div>
+          ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="card-bezel p-12 text-center">
+      <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto mb-4">
+        <FolderNotchOpen className="w-6 h-6 text-zinc-400" />
+      </div>
+      <p className="text-sm font-medium text-zinc-600">暂无项目</p>
+      <p className="text-xs text-zinc-400 mt-1">创建第一个项目开始使用</p>
     </div>
   );
 }

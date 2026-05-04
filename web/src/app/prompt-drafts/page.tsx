@@ -1,5 +1,5 @@
-// prompt-drafts/page.tsx - 提示词草稿管理页面
-// 支持生成结构化草稿、编辑确认、发送创建 Run/Task。
+// prompt-drafts/page.tsx - 提示词草稿
+// 生成、编辑、发送结构化提示词草稿。
 "use client";
 
 import { useState, useEffect, Suspense } from "react";
@@ -12,13 +12,20 @@ import {
   updatePromptDraft,
   sendPromptDraft,
   listPromptDrafts,
-  draftStatusColors,
 } from "@/lib/api";
+import { StatusBadge } from "@/components/StatusBadge";
+import {
+  Sparkle,
+  PencilSimple,
+  PaperPlaneRight,
+  FloppyDisk,
+  X,
+  Lightning,
+} from "@phosphor-icons/react/dist/ssr";
 
-// 任务类型选项
 const TASK_TYPES = [
   { value: "", label: "自动推断" },
-  { value: "bugfix", label: "修复Bug" },
+  { value: "bugfix", label: "修复 Bug" },
   { value: "build", label: "创建功能" },
   { value: "review", label: "代码审查" },
   { value: "qa", label: "测试验证" },
@@ -26,16 +33,14 @@ const TASK_TYPES = [
   { value: "architecture", label: "架构设计" },
 ];
 
-// PromptDraftsPageWrapper 包装 Suspense 边界以支持 useSearchParams
 export default function PromptDraftsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-center text-neutral-400">加载中...</div>}>
+    <Suspense fallback={<div className="text-sm text-zinc-400 py-12 text-center">加载中...</div>}>
       <PromptDraftsContent />
     </Suspense>
   );
 }
 
-// PromptDraftsContent 提示词草稿管理页面主体
 function PromptDraftsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -50,7 +55,6 @@ function PromptDraftsContent() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // 加载项目列表
   useEffect(() => {
     apiFetch<Project[]>("/api/projects")
       .then((p) => {
@@ -60,15 +64,11 @@ function PromptDraftsContent() {
       .catch(() => {});
   }, []);
 
-  // 加载草稿列表
   useEffect(() => {
     if (!selectedProjectId) return;
-    listPromptDrafts(selectedProjectId)
-      .then(setDrafts)
-      .catch(() => setDrafts([]));
+    listPromptDrafts(selectedProjectId).then(setDrafts).catch(() => setDrafts([]));
   }, [selectedProjectId]);
 
-  // handleGenerate 生成草稿
   const handleGenerate = async () => {
     if (!selectedProjectId || !originalInput.trim()) return;
     setLoading(true);
@@ -88,7 +88,6 @@ function PromptDraftsContent() {
     }
   };
 
-  // handleSave 保存编辑
   const handleSave = async () => {
     if (!editingDraft) return;
     setLoading(true);
@@ -105,10 +104,8 @@ function PromptDraftsContent() {
     }
   };
 
-  // handleSend 发送草稿（发送前自动保存未提交的编辑）
   const handleSend = async (draftId: string) => {
-    // 如果正在编辑的草稿就是要发送的草稿，先保存
-    if (editingDraft && editingDraft.id === draftId && editContent !== (editingDraft.final_prompt || editingDraft.generated_prompt)) {
+    if (editingDraft?.id === draftId && editContent !== (editingDraft.final_prompt || editingDraft.generated_prompt)) {
       try {
         await updatePromptDraft(editingDraft.id, editContent, editingDraft.task_type);
       } catch {
@@ -132,54 +129,45 @@ function PromptDraftsContent() {
     }
   };
 
-  // handleSelectDraft 选择草稿进行编辑
-  const handleSelectDraft = (draft: PromptDraft) => {
-    if (draft.status !== "draft") return;
-    setEditingDraft(draft);
-    setEditContent(draft.final_prompt || draft.generated_prompt);
-  };
-
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold mb-6">提示词草稿</h1>
+    <div className="space-y-6 animate-fade-up max-w-4xl">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">提示词草稿</h1>
+        <p className="text-sm text-zinc-500 mt-1">生成、编辑并发送结构化提示词</p>
+      </div>
 
-      {/* 错误/成功提示 */}
       {error && (
-        <div role="alert" className="mb-4 p-3 bg-error-50 text-error-700 rounded-md border border-error-500">
-          操作失败：{error}
-        </div>
+        <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-sm">{error}</div>
       )}
       {success && (
-        <div role="status" className="mb-4 p-3 bg-success-50 text-success-700 rounded-md border border-success-500">
-          {success}
-        </div>
+        <div className="p-3 bg-accent-50 border border-accent-200/60 rounded-xl text-accent-700 text-sm">{success}</div>
       )}
 
       {/* 输入区 */}
-      <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-6">
-        <div className="flex gap-4 mb-3">
+      <div className="card-bezel p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Lightning weight="fill" className="w-4 h-4 text-accent-600" />
+          <span className="text-sm font-medium text-zinc-700">生成草稿</span>
+        </div>
+        <div className="flex gap-3 mb-3">
           <select
             value={selectedProjectId}
             onChange={(e) => setSelectedProjectId(e.target.value)}
-            aria-label="选择项目"
-            className="border border-neutral-300 rounded-md px-3 py-2 text-sm flex-shrink-0 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+            className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500 transition-all"
           >
             {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
+              <option key={p.id} value={p.id}>{p.name}</option>
             ))}
           </select>
           <select
             value={taskType}
             onChange={(e) => setTaskType(e.target.value)}
-            aria-label="任务类型"
-            className="border border-neutral-300 rounded-md px-3 py-2 text-sm flex-shrink-0 focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+            className="bg-zinc-50 border border-zinc-200 rounded-xl px-3 py-2.5 text-sm
+                       focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500 transition-all"
           >
             {TASK_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
-                {t.label}
-              </option>
+              <option key={t.value} value={t.value}>{t.label}</option>
             ))}
           </select>
         </div>
@@ -187,28 +175,29 @@ function PromptDraftsContent() {
           value={originalInput}
           onChange={(e) => setOriginalInput(e.target.value)}
           placeholder="描述你想要完成的任务..."
-          aria-label="任务描述"
-          className="w-full border border-neutral-300 rounded-md p-3 text-sm resize-y min-h-[80px] focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+          className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-sm resize-y min-h-[80px]
+                     placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent-500/20
+                     focus:border-accent-500 transition-all"
           rows={3}
         />
-        <div className="mt-3 flex gap-2 flex-wrap">
+        <div className="mt-3 flex gap-2 flex-wrap items-center">
           <button
             onClick={handleGenerate}
             disabled={loading || !originalInput.trim()}
-            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+            className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-medium
+                       hover:bg-zinc-800 disabled:opacity-50 pressable transition-colors"
           >
+            <Sparkle className="w-4 h-4" />
             {loading ? "生成中..." : "生成草稿"}
           </button>
-          {/* 快捷任务类型按钮 */}
           {["bugfix", "build", "review", "qa", "docs"].map((t) => (
             <button
               key={t}
-              onClick={() => { setTaskType(t); }}
-              aria-label={TASK_TYPES.find((tt) => tt.value === t)?.label}
-              className={`px-3 py-2 text-xs rounded-md border transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none ${
+              onClick={() => setTaskType(t)}
+              className={`px-3 py-2 text-xs font-medium rounded-lg border transition-all duration-200 pressable ${
                 taskType === t
-                  ? "bg-primary-50 border-primary-300 text-primary-700"
-                  : "bg-neutral-50 border-neutral-200 hover:bg-neutral-100"
+                  ? "bg-accent-50 border-accent-200 text-accent-700"
+                  : "bg-zinc-50 border-zinc-200 text-zinc-500 hover:bg-zinc-100"
               }`}
             >
               {TASK_TYPES.find((tt) => tt.value === t)?.label}
@@ -219,84 +208,94 @@ function PromptDraftsContent() {
 
       {/* 编辑区 */}
       {editingDraft && (
-        <div className="bg-white rounded-lg border border-neutral-200 p-4 mb-6 border-l-4 border-l-primary-500">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold">编辑草稿</h2>
-            <span className={`px-2 py-1 text-xs rounded-full ${draftStatusColors[editingDraft.status] || "bg-neutral-100"}`}>
-              {editingDraft.status === "draft" ? "草稿" : "已发送"}
-            </span>
+        <div className="card-bezel p-6 border-l-4 border-l-accent-500">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <PencilSimple className="w-4 h-4 text-zinc-500" />
+              <h2 className="text-sm font-semibold text-zinc-900">编辑草稿</h2>
+            </div>
+            <StatusBadge status={editingDraft.status} />
           </div>
-          <div className="text-xs text-neutral-500 mb-2">
-            任务类型: {editingDraft.task_type} | 原始输入: {editingDraft.original_input.slice(0, 60)}...
+          <div className="text-xs text-zinc-400 mb-3">
+            {editingDraft.task_type} | {editingDraft.original_input.slice(0, 60)}...
           </div>
           <textarea
             value={editContent}
             onChange={(e) => setEditContent(e.target.value)}
-            aria-label="编辑草稿内容"
-            className="w-full border border-neutral-300 rounded-md p-3 text-sm font-mono resize-y min-h-[200px] focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-sm font-mono resize-y min-h-[200px]
+                       focus:outline-none focus:ring-2 focus:ring-accent-500/20 focus:border-accent-500 transition-all"
             rows={10}
           />
-          <div className="mt-3 flex gap-2">
+          <div className="mt-4 flex gap-2">
             <button
               onClick={handleSave}
               disabled={loading}
-              className="px-4 py-2 bg-neutral-600 text-white rounded-md hover:bg-neutral-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-neutral-400 focus-visible:outline-none"
+              className="flex items-center gap-2 px-4 py-2.5 bg-zinc-700 text-white rounded-xl text-sm font-medium
+                         hover:bg-zinc-600 disabled:opacity-50 pressable transition-colors"
             >
+              <FloppyDisk className="w-4 h-4" />
               保存
             </button>
             <button
               onClick={() => handleSend(editingDraft.id)}
               disabled={loading}
-              className="px-4 py-2 bg-success-600 text-white rounded-md hover:bg-success-700 disabled:opacity-50 text-sm focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
+              className="flex items-center gap-2 px-4 py-2.5 bg-accent-600 text-white rounded-xl text-sm font-medium
+                         hover:bg-accent-700 disabled:opacity-50 pressable transition-colors"
             >
+              <PaperPlaneRight className="w-4 h-4" />
               确认发送
             </button>
             <button
               onClick={() => setEditingDraft(null)}
-              className="px-4 py-2 border border-neutral-300 rounded-md hover:bg-neutral-50 text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none"
+              className="flex items-center gap-2 px-4 py-2.5 border border-zinc-200 rounded-xl text-sm text-zinc-600
+                         hover:bg-zinc-50 pressable transition-colors"
             >
+              <X className="w-4 h-4" />
               取消
             </button>
           </div>
         </div>
       )}
 
-      {/* 草稿历史列表 */}
-      <div className="bg-white rounded-lg border border-neutral-200">
-        <div className="px-4 py-3 border-b border-neutral-200">
-          <h2 className="font-semibold">草稿历史</h2>
+      {/* 草稿历史 */}
+      <div className="card-bezel overflow-hidden">
+        <div className="px-6 py-4 border-b border-zinc-100">
+          <h2 className="text-sm font-semibold text-zinc-900">草稿历史</h2>
         </div>
         {drafts.length === 0 ? (
-          <div className="p-8 text-center text-neutral-400">暂无草稿</div>
+          <div className="p-12 text-center">
+            <p className="text-sm text-zinc-400">暂无草稿</p>
+          </div>
         ) : (
-          <div className="divide-y divide-neutral-100">
+          <div className="divide-y divide-zinc-100">
             {drafts.map((draft) => (
               <div
                 key={draft.id}
-                className={`px-4 py-3 flex items-center justify-between transition-colors ${
-                  draft.status === "draft" ? "hover:bg-neutral-50 cursor-pointer" : "opacity-60"
+                className={`px-6 py-4 flex items-center justify-between transition-colors duration-200 ${
+                  draft.status === "draft" ? "hover:bg-zinc-50 cursor-pointer" : "opacity-60"
                 }`}
-                onClick={() => handleSelectDraft(draft)}
-                role={draft.status === "draft" ? "button" : undefined}
-                tabIndex={draft.status === "draft" ? 0 : undefined}
-                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleSelectDraft(draft); }}
+                onClick={() => {
+                  if (draft.status === "draft") {
+                    setEditingDraft(draft);
+                    setEditContent(draft.final_prompt || draft.generated_prompt);
+                  }
+                }}
               >
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium truncate">{draft.original_input}</div>
-                  <div className="text-xs text-neutral-500 mt-1">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-zinc-900 truncate">{draft.original_input}</p>
+                  <p className="text-xs text-zinc-400 mt-1">
                     {draft.task_type} | {new Date(draft.created_at).toLocaleString("zh-CN")}
-                  </div>
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 ml-4">
-                  <span className={`px-2 py-1.5 text-xs rounded-full ${draftStatusColors[draft.status] || "bg-neutral-100"}`}>
-                    {draft.status === "draft" ? "草稿" : "已发送"}
-                  </span>
+                <div className="flex items-center gap-3 shrink-0 ml-4">
+                  <StatusBadge status={draft.status} />
                   {draft.status === "draft" && (
                     <button
                       onClick={(e) => { e.stopPropagation(); handleSend(draft.id); }}
-                      aria-label={`发送草稿: ${draft.original_input.slice(0, 20)}`}
-                      className="px-3 py-2 text-sm bg-success-600 text-white rounded-md hover:bg-success-700 focus-visible:ring-2 focus-visible:ring-success-500 focus-visible:outline-none"
+                      className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-accent-600 text-white
+                                 rounded-lg hover:bg-accent-700 pressable transition-colors"
                     >
+                      <PaperPlaneRight className="w-3 h-3" />
                       发送
                     </button>
                   )}

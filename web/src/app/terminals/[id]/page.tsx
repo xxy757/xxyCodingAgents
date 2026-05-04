@@ -1,28 +1,24 @@
-// terminals/[id]/page.tsx - 终端详情页面
-// 通过 WebSocket 和 xterm.js 实现交互式终端，支持双向数据传输。
+// terminals/[id]/page.tsx - 终端详情
+// xterm.js + WebSocket 实现交互式终端。
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, type TerminalSession } from "@/lib/api";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
 
-// TerminalDetailPage 终端详情页面组件
 export default function TerminalDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const [id, setId] = useState<string>("");
   const [session, setSession] = useState<TerminalSession | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const terminalRef = useRef<HTMLDivElement>(null);    // xterm.js 挂载点
-  const xtermRef = useRef<any>(null);                   // xterm 实例引用
-  const wsRef = useRef<WebSocket | null>(null);          // WebSocket 连接引用
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<any>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const router = useRouter();
 
-  // 解析异步参数获取终端 ID
-  useEffect(() => {
-    params.then((p) => setId(p.id));
-  }, [params]);
+  useEffect(() => { params.then((p) => setId(p.id)); }, [params]);
 
-  // 加载终端会话信息
   useEffect(() => {
     if (!id) return;
     apiFetch<TerminalSession>(`/api/terminals/${id}`)
@@ -30,29 +26,26 @@ export default function TerminalDetailPage({ params }: { params: Promise<{ id: s
       .catch((e) => setError(e.message));
   }, [id]);
 
-  // 初始化 xterm.js 终端和 WebSocket 连接
   useEffect(() => {
     if (!session || !terminalRef.current) return;
 
     let terminal: any;
     let fitAddon: any;
 
-    const initTerminal = async () => {
-      // 动态导入 xterm.js 和适配插件
+    const init = async () => {
       const { Terminal } = await import("@xterm/xterm");
       const { FitAddon } = await import("@xterm/addon-fit");
-
       await import("@xterm/xterm/css/xterm.css");
 
-      // 创建终端实例
       terminal = new Terminal({
         cursorBlink: true,
-        fontSize: 14,
-        fontFamily: "Menlo, Monaco, 'Courier New', monospace",
+        fontSize: 13,
+        fontFamily: "var(--font-mono), Menlo, Monaco, 'Courier New', monospace",
         theme: {
-          background: "#1e1e1e",
-          foreground: "#d4d4d4",
-          cursor: "#d4d4d4",
+          background: "#09090b",
+          foreground: "#d4d4d8",
+          cursor: "#a1a1aa",
+          selectionBackground: "rgba(161,161,170,0.2)",
         },
       });
 
@@ -60,107 +53,79 @@ export default function TerminalDetailPage({ params }: { params: Promise<{ id: s
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current!);
       fitAddon.fit();
-
       xtermRef.current = terminal;
 
-      // 建立 WebSocket 连接
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${wsProtocol}//${window.location.host}/api/terminals/${session.id}/ws`;
-      const ws = new WebSocket(wsUrl);
+      const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/terminals/${session.id}/ws`);
       wsRef.current = ws;
 
-      // 处理服务端推送的输出数据
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === "output" && data.data) {
-            terminal.write(data.data);
-          } else if (data.type === "error") {
-            terminal.write(`\r\n\x1b[31m[Error] ${data.message}\x1b[0m\r\n`);
-          }
+          if (data.type === "output" && data.data) terminal.write(data.data);
+          else if (data.type === "error") terminal.write(`\r\n\x1b[31m[Error] ${data.message}\x1b[0m\r\n`);
         } catch {
           terminal.write(event.data);
         }
       };
 
-      ws.onopen = () => {
-        terminal.write("\x1b[32m[Connected]\x1b[0m\r\n");
-      };
+      ws.onopen = () => terminal.write("\x1b[32m[Connected]\x1b[0m\r\n");
+      ws.onclose = () => terminal.write("\r\n\x1b[33m[Disconnected]\x1b[0m\r\n");
+      ws.onerror = () => terminal.write("\r\n\x1b[31m[Connection Error]\x1b[0m\r\n");
 
-      ws.onclose = () => {
-        terminal.write("\r\n\x1b[33m[Disconnected]\x1b[0m\r\n");
-      };
-
-      ws.onerror = () => {
-        terminal.write("\r\n\x1b[31m[Connection Error]\x1b[0m\r\n");
-      };
-
-      // 将用户输入转发到 WebSocket
       terminal.onData((data: string) => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: "input", data }));
-        }
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "input", data }));
       });
 
-      // 窗口大小变化时自动调整终端尺寸
-      const handleResize = () => {
-        if (fitAddon) fitAddon.fit();
-      };
-      window.addEventListener("resize", handleResize);
-
-      return () => {
-        window.removeEventListener("resize", handleResize);
-      };
+      const onResize = () => fitAddon?.fit();
+      window.addEventListener("resize", onResize);
+      return () => window.removeEventListener("resize", onResize);
     };
 
-    initTerminal();
+    init();
 
-    // 组件卸载时关闭连接和终端
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      if (terminal) {
-        terminal.dispose();
-      }
+      wsRef.current?.close();
+      terminal?.dispose();
     };
   }, [session]);
 
-  if (!id) return <div className="p-6 text-neutral-500">加载中...</div>;
+  if (!id) return <div className="text-sm text-zinc-400 py-12 text-center">加载中...</div>;
 
   if (error) {
     return (
-      <div className="p-6">
-        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">{error}</div>
-        <button onClick={() => router.back()} className="text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
-          返回
-        </button>
+      <div className="space-y-4">
+        <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-sm">{error}</div>
+        <button onClick={() => router.back()} className="text-sm text-accent-600 hover:underline">返回</button>
       </div>
     );
   }
 
   return (
-    <div className="p-6 h-full flex flex-col">
-      {/* 页头：返回按钮、标题和状态 */}
+    <div className="h-full flex flex-col animate-fade-up">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="text-primary-600 hover:underline text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
-            ← 返回
+          <button
+            onClick={() => router.back()}
+            className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 pressable transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 text-zinc-600" />
           </button>
-          <h1 className="text-xl font-bold">终端 {id.slice(0, 8)}</h1>
+          <h1 className="text-lg font-semibold tracking-tight text-zinc-900">
+            终端 <span className="font-mono text-zinc-400">{id.slice(0, 8)}</span>
+          </h1>
           {session && <StatusBadge status={session.status} />}
         </div>
         {session && (
-          <div className="text-sm text-neutral-500">
-            tmux: <span className="font-mono">{session.tmux_session}</span>
+          <div className="text-xs text-zinc-400 font-mono">
+            tmux: {session.tmux_session}
           </div>
         )}
       </div>
 
-      {/* xterm.js 终端容器 */}
       <div
         ref={terminalRef}
-        className="flex-1 rounded-lg overflow-hidden border border-neutral-700"
+        className="flex-1 rounded-xl overflow-hidden border border-zinc-800 p-3"
         style={{ minHeight: "500px" }}
       />
     </div>

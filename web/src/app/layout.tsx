@@ -1,6 +1,8 @@
-// layout.tsx - 应用根布局
-// 提供全局 HTML 结构、侧边栏和主内容区域布局。
+// layout.tsx - 根布局
+// 提供 Geist 字体、侧边栏导航和主内容区。
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { Sidebar } from "@/components/Sidebar";
 
@@ -9,17 +11,22 @@ export const metadata: Metadata = {
   description: "AI Development Orchestration Platform",
 };
 
-// RootLayout 是应用的根布局组件，包含侧边栏和主内容区
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-CN">
-      <body className="flex h-screen overflow-hidden">
-        <a href="#main-content" className="skip-to-content">
+    <html lang="zh-CN" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className="flex h-screen overflow-hidden bg-zinc-50 font-sans">
+        <a href="#main-content" className="skip-link">
           跳转到主内容
         </a>
         <Sidebar />
-        <main id="main-content" className="flex-1 overflow-y-auto bg-neutral-50 p-6">
-          {children}
+        <main
+          id="main-content"
+          className="flex-1 overflow-y-auto"
+          style={{ scrollBehavior: "smooth" }}
+        >
+          <div className="page-container px-6 py-8 md:px-10 md:py-10">
+            {children}
+          </div>
         </main>
       </body>
     </html>

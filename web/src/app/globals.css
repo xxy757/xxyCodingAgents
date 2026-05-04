@@ -1,104 +1,98 @@
 @import "tailwindcss";
 
-/* ==================== 设计 Token ==================== */
+/* ==================== Design Tokens ==================== */
+/* Vibe: Soft Structuralism — airy, expensive, functional */
 
 @theme {
-  /* 主色板（蓝色系） */
-  --color-primary-50: #eff6ff;
-  --color-primary-100: #dbeafe;
-  --color-primary-200: #bfdbfe;
-  --color-primary-300: #93c5fd;
-  --color-primary-400: #60a5fa;
-  --color-primary-500: #3b82f6;
-  --color-primary-600: #2563eb;
-  --color-primary-700: #1d4ed8;
-  --color-primary-800: #1e40af;
-  --color-primary-900: #1e3a8a;
+  /* Accent: Deep Emerald (single accent, saturation < 80%) */
+  --color-accent-50: #ecfdf5;
+  --color-accent-100: #d1fae5;
+  --color-accent-200: #a7f3d0;
+  --color-accent-400: #34d399;
+  --color-accent-500: #10b981;
+  --color-accent-600: #059669;
+  --color-accent-700: #047857;
 
-  /* 语义色 */
-  --color-success-50: #f0fdf4;
-  --color-success-500: #22c55e;
-  --color-success-600: #16a34a;
-  --color-success-700: #15803d;
+  /* Neutral: Zinc (single palette, no warm/cool mixing) */
+  --color-zinc-50: #fafafa;
+  --color-zinc-100: #f4f4f5;
+  --color-zinc-200: #e4e4e7;
+  --color-zinc-300: #d4d4d8;
+  --color-zinc-400: #a1a1aa;
+  --color-zinc-500: #71717a;
+  --color-zinc-600: #52525b;
+  --color-zinc-700: #3f3f46;
+  --color-zinc-800: #27272a;
+  --color-zinc-900: #18181b;
+  --color-zinc-950: #09090b;
 
-  --color-warning-50: #fefce8;
-  --color-warning-500: #eab308;
-  --color-warning-600: #ca8a04;
+  /* Semantic: muted, desaturated */
+  --color-surface: #fafafa;
+  --color-surface-raised: #ffffff;
+  --color-surface-sunken: #f4f4f5;
 
-  --color-error-50: #fef2f2;
-  --color-error-500: #ef4444;
-  --color-error-600: #dc2626;
-  --color-error-700: #b91c1c;
+  --color-text-primary: #18181b;
+  --color-text-secondary: #52525b;
+  --color-text-tertiary: #a1a1aa;
+  --color-text-inverse: #fafafa;
 
-  --color-info-50: #faf5ff;
-  --color-info-500: #a855f7;
-  --color-info-600: #9333ea;
+  --color-border-default: #e4e4e7;
+  --color-border-subtle: #f4f4f5;
 
-  /* 中性色（统一使用 slate） */
-  --color-neutral-50: #f8fafc;
-  --color-neutral-100: #f1f5f9;
-  --color-neutral-200: #e2e8f0;
-  --color-neutral-300: #cbd5e1;
-  --color-neutral-400: #94a3b8;
-  --color-neutral-500: #64748b;
-  --color-neutral-600: #475569;
-  --color-neutral-700: #334155;
-  --color-neutral-800: #1e293b;
-  --color-neutral-900: #0f172a;
+  /* Status: desaturated to blend with neutrals */
+  --color-success: #059669;
+  --color-success-muted: #ecfdf5;
+  --color-warning: #d97706;
+  --color-warning-muted: #fffbeb;
+  --color-error: #dc2626;
+  --color-error-muted: #fef2f2;
+  --color-info: #2563eb;
+  --color-info-muted: #eff6ff;
 
-  /* 间距（4px 基准） */
-  --spacing-1: 0.25rem;
-  --spacing-2: 0.5rem;
-  --spacing-3: 0.75rem;
-  --spacing-4: 1rem;
-  --spacing-5: 1.25rem;
-  --spacing-6: 1.5rem;
-  --spacing-8: 2rem;
-
-  /* 圆角 */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 12px;
+  /* Radius: squircle aesthetic */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
   --radius-full: 9999px;
 
-  /* 阴影 */
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  /* Shadows: tinted, diffused — no harsh dark shadows */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.06);
+  --shadow-glow: 0 0 0 1px rgba(16, 185, 129, 0.1), 0 4px 16px rgba(16, 185, 129, 0.08);
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #0f172a;
+  --font-sans: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 }
+
+/* ==================== Base ==================== */
 
 body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: "Inter", "Helvetica Neue", Arial, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--color-text-primary);
+  background: var(--color-surface);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.011em;
 }
 
-/* ==================== 全局 focus-visible ==================== */
+/* ==================== Focus ==================== */
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid var(--color-primary-500);
+:focus-visible {
+  outline: 2px solid var(--color-accent-500);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
-/* ==================== 减少动效偏好 ==================== */
+/* ==================== Reduced Motion ==================== */
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -106,31 +100,25 @@ textarea:focus-visible {
   }
 }
 
-/* ==================== 已访问链接样式 ==================== */
+/* ==================== Skip Link ==================== */
 
-a:visited {
-  color: var(--color-info-500);
-}
-
-/* ==================== Skip to content ==================== */
-
-.skip-to-content {
+.skip-link {
   position: absolute;
   left: -9999px;
   top: 0;
   z-index: 999;
   padding: 0.5rem 1rem;
-  background: var(--color-primary-600);
+  background: var(--color-accent-600);
   color: white;
   font-weight: 600;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
 }
 
-.skip-to-content:focus {
+.skip-link:focus {
   left: 0;
 }
 
-/* ==================== 加载骨架屏动画 ==================== */
+/* ==================== Skeleton Loader ==================== */
 
 @keyframes shimmer {
   0% { background-position: -200% 0; }
@@ -138,7 +126,7 @@ a:visited {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--color-neutral-100) 25%, var(--color-neutral-200) 50%, var(--color-neutral-100) 75%);
+  background: linear-gradient(90deg, var(--color-zinc-100) 25%, var(--color-zinc-200) 50%, var(--color-zinc-100) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
   border-radius: var(--radius-md);
@@ -147,6 +135,65 @@ a:visited {
 @media (prefers-reduced-motion: reduce) {
   .skeleton {
     animation: none;
-    background: var(--color-neutral-100);
+    background: var(--color-zinc-100);
   }
+}
+
+/* ==================== Scroll-driven entry ==================== */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Staggered children */
+.stagger > * {
+  animation: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
+.stagger > *:nth-child(6) { animation-delay: 300ms; }
+
+/* ==================== Utility ==================== */
+
+/* Double-bezel card */
+.card-bezel {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-bezel:hover {
+  box-shadow: var(--shadow-md);
+  border-color: var(--color-zinc-300);
+}
+
+/* Tactile press */
+.pressable {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.pressable:active {
+  transform: scale(0.98) translateY(1px);
+}
+
+/* Page container */
+.page-container {
+  max-width: 1400px;
+  margin: 0 auto;
 }

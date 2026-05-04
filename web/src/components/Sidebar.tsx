@@ -1,52 +1,89 @@
-// Sidebar.tsx - 应用侧边栏导航组件
-// 提供主导航菜单，高亮当前路由对应的导航项。
+// Sidebar.tsx - 侧边栏导航
+// Phosphor 图标 + 高亮当前路由 + 紧凑专业风格。
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  House,
+  FolderNotchOpenIcon as FolderNotchOpen,
+  PlayCircle,
+  Robot,
+  Terminal,
+  GearSix,
+  Lightning,
+} from "@phosphor-icons/react";
 
-// navItems 定义导航菜单项，包含路径、显示标签和图标
 const navItems = [
-  { href: "/", label: "仪表盘", icon: "▦" },
-  { href: "/projects", label: "项目", icon: "▣" },
-  { href: "/runs", label: "运行", icon: "▶" },
-  { href: "/agents", label: "Agent", icon: "◈" },
-  { href: "/terminals", label: "终端", icon: "□" },
-  { href: "/system", label: "系统", icon: "◉" },
+  { href: "/", label: "仪表盘", icon: House },
+  { href: "/projects", label: "项目", icon: FolderNotchOpen },
+  { href: "/runs", label: "运行", icon: PlayCircle },
+  { href: "/agents", label: "Agent", icon: Robot },
+  { href: "/terminals", label: "终端", icon: Terminal },
+  { href: "/system", label: "系统", icon: GearSix },
 ];
 
-// Sidebar 是应用的侧边栏导航组件
 export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="w-56 bg-neutral-900 text-white flex flex-col" role="navigation" aria-label="主导航">
-      {/* 品牌区域 */}
-      <div className="p-4 border-b border-neutral-700">
-        <h1 className="text-lg font-bold">AI Dev Platform</h1>
-        <p className="text-xs text-neutral-400 mt-1">开发调度控制台</p>
+    <aside className="w-60 shrink-0 bg-zinc-950 text-zinc-300 flex flex-col border-r border-zinc-800/50">
+      {/* Brand */}
+      <div className="px-5 py-5 border-b border-zinc-800/50">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-lg bg-accent-600 flex items-center justify-center">
+            <Lightning weight="fill" className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h1 className="text-sm font-semibold text-zinc-100 tracking-tight">
+              AI Dev Platform
+            </h1>
+            <p className="text-[11px] text-zinc-500 leading-none mt-0.5">
+              v0.1.0
+            </p>
+          </div>
+        </div>
       </div>
-      {/* 导航链接列表 */}
-      <nav className="flex-1 p-2">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            aria-current={pathname === item.href ? "page" : undefined}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none ${
-              pathname === item.href
-                ? "bg-neutral-700 text-white"
-                : "text-neutral-300 hover:bg-neutral-800 hover:text-white"
-            }`}
-          >
-            <span className="w-5 h-5 flex items-center justify-center text-base" aria-hidden="true">{item.icon}</span>
-            <span>{item.label}</span>
-          </Link>
-        ))}
+
+      {/* Nav */}
+      <nav className="flex-1 px-3 py-4 space-y-0.5" role="navigation" aria-label="主导航">
+        {navItems.map((item) => {
+          const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={active ? "page" : undefined}
+              className={`
+                flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium
+                transition-all duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]
+                pressable
+                ${active
+                  ? "bg-zinc-800/80 text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]"
+                  : "text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200"
+                }
+              `}
+            >
+              <Icon
+                weight={active ? "fill" : "regular"}
+                className={`w-[18px] h-[18px] ${active ? "text-accent-400" : ""}`}
+              />
+              <span>{item.label}</span>
+              {active && (
+                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-accent-400" />
+              )}
+            </Link>
+          );
+        })}
       </nav>
-      {/* 版本信息 */}
-      <div className="p-4 border-t border-neutral-700 text-xs text-neutral-500">
-        v0.1.0 MVP
+
+      {/* Footer */}
+      <div className="px-5 py-4 border-t border-zinc-800/50">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full bg-accent-500 animate-pulse" />
+          <span className="text-[11px] text-zinc-500">服务运行中</span>
+        </div>
       </div>
     </aside>
   );

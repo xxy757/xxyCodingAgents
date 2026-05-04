@@ -1,110 +1,156 @@
-// system/page.tsx - 系统监控页面
-// 展示系统资源使用率、压力状态、tmux 会话和配置参数。
-// 每 3 秒自动刷新指标数据。
+// system/page.tsx - 系统监控
+// 资源指标卡片 + 压力状态 + tmux 会话 + 配置参数。
 "use client";
 
 import { useState, useEffect } from "react";
-import { apiFetch, ResourceSnapshot, pressureColors } from "@/lib/api";
+import { apiFetch, type ResourceSnapshot } from "@/lib/api";
+import {
+  Cpu,
+  HardDrive,
+  Memory,
+  Gauge,
+  Terminal,
+  GearSix,
+  ActivityIcon as Activity,
+} from "@phosphor-icons/react/dist/ssr";
 
-// SystemPage 系统监控页面组件
 export default function SystemPage() {
   const [metrics, setMetrics] = useState<ResourceSnapshot | null>(null);
   const [diagnostics, setDiagnostics] = useState<any>(null);
 
-  // 加载系统指标和诊断信息，每 3 秒刷新指标
   useEffect(() => {
-    apiFetch<ResourceSnapshot>("/api/system/metrics").then(setMetrics).catch(console.error);
-    apiFetch<any>("/api/system/diagnostics").then(setDiagnostics).catch(console.error);
-    const interval = setInterval(() => {
+    apiFetch<ResourceSnapshot>("/api/system/metrics").then(setMetrics).catch(() => {});
+    apiFetch<any>("/api/system/diagnostics").then(setDiagnostics).catch(() => {});
+    const t = setInterval(() => {
       apiFetch<ResourceSnapshot>("/api/system/metrics").then(setMetrics).catch(() => {});
     }, 3000);
-    return () => clearInterval(interval);
+    return () => clearInterval(t);
   }, []);
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold text-neutral-900 mb-6">系统监控</h2>
+    <div className="space-y-6 animate-fade-up">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">系统监控</h1>
+        <p className="text-sm text-zinc-500 mt-1">资源使用与服务状态</p>
+      </div>
 
-      {/* 资源使用率卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <MetricCard
-          title="内存使用率"
-          value={metrics ? `${metrics.memory_percent.toFixed(1)}%` : "-"}
-          bar={metrics?.memory_percent || 0}
-          color="primary"
-          loading={metrics === null}
+      {/* 资源指标 */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 stagger">
+        <GaugeCard
+          icon={Memory}
+          label="内存使用率"
+          value={metrics?.memory_percent ?? 0}
+          loading={!metrics}
         />
-        <MetricCard
-          title="CPU 使用率"
-          value={metrics ? `${metrics.cpu_percent.toFixed(1)}%` : "-"}
-          bar={metrics?.cpu_percent || 0}
-          color="success"
-          loading={metrics === null}
+        <GaugeCard
+          icon={Cpu}
+          label="CPU 使用率"
+          value={metrics?.cpu_percent ?? 0}
+          loading={!metrics}
         />
-        <MetricCard
-          title="磁盘使用率"
-          value={metrics ? `${metrics.disk_percent.toFixed(1)}%` : "-"}
-          bar={metrics?.disk_percent || 0}
-          color="info"
-          loading={metrics === null}
+        <GaugeCard
+          icon={HardDrive}
+          label="磁盘使用率"
+          value={metrics?.disk_percent ?? 0}
+          loading={!metrics}
         />
       </div>
 
-      {/* 压力状态和 tmux 会话 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white rounded-lg border border-neutral-200 p-6">
-          <h3 className="text-lg font-semibold mb-4">压力状态</h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-neutral-600">当前压力等级</span>
-              <span className={`text-lg font-bold ${pressureColors[metrics?.pressure_level || "normal"]}`}>
-                {(metrics?.pressure_level || "normal").toUpperCase()}
+      {/* 压力 + tmux + 配置 */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* 压力状态 */}
+        <div className="card-bezel p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Gauge className="w-4 h-4 text-zinc-500" />
+            <span className="text-sm font-medium text-zinc-700">压力状态</span>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs text-zinc-400 mb-1">当前等级</p>
+              <span className={`text-2xl font-semibold tracking-tight ${
+                metrics?.pressure_level === "normal" ? "text-emerald-600" :
+                metrics?.pressure_level === "warn" ? "text-amber-600" : "text-red-600"
+              }`}>
+                {(metrics?.pressure_level ?? "normal").toUpperCase()}
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-sm text-neutral-600">活跃 Agent 数</span>
-              <span className="text-lg font-bold">{metrics?.active_agents ?? 0}</span>
+            <div>
+              <p className="text-xs text-zinc-400 mb-1">活跃 Agent</p>
+              <span className="text-2xl font-semibold tracking-tight text-zinc-900">
+                {metrics?.active_agents ?? 0}
+              </span>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-neutral-200 p-6">
-          <h3 className="text-lg font-semibold mb-4">tmux 会话</h3>
-          <pre className="text-sm text-neutral-600 bg-neutral-50 p-3 rounded overflow-x-auto">
-            {diagnostics?.tmux_sessions || "无活跃会话"}
-          </pre>
+        {/* tmux 会话 */}
+        <div className="card-bezel p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <Terminal className="w-4 h-4 text-zinc-500" />
+            <span className="text-sm font-medium text-zinc-700">tmux 会话</span>
+          </div>
+          <div className="bg-zinc-50 rounded-xl p-4 border border-zinc-100">
+            <pre className="text-xs text-zinc-600 font-mono whitespace-pre-wrap break-all leading-relaxed">
+              {diagnostics?.tmux_sessions || "无活跃会话"}
+            </pre>
+          </div>
         </div>
-      </div>
 
-      {/* 调度器配置参数 */}
-      <div className="mt-6 bg-white rounded-lg border border-neutral-200 p-6">
-        <h3 className="text-lg font-semibold mb-4">配置参数</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <ConfigItem label="最大并发 Agent" value={diagnostics?.config?.max_concurrent_agents ?? "-"} />
-          <ConfigItem label="最大重型任务" value={diagnostics?.config?.max_heavy_agents ?? "-"} />
+        {/* 配置参数 */}
+        <div className="card-bezel p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <GearSix className="w-4 h-4 text-zinc-500" />
+            <span className="text-sm font-medium text-zinc-700">调度配置</span>
+          </div>
+          <div className="space-y-3">
+            <ConfigRow label="最大并发 Agent" value={diagnostics?.config?.max_concurrent_agents ?? "-"} />
+            <ConfigRow label="最大重型任务" value={diagnostics?.config?.max_heavy_agents ?? "-"} />
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// MetricCard 带进度条的资源指标卡片
-function MetricCard({ title, value, bar, color, loading }: { title: string; value: string; bar: number; color: string; loading?: boolean }) {
-  const barColors: Record<string, string> = { primary: "bg-primary-500", success: "bg-success-500", info: "bg-info-500" };
+function GaugeCard({
+  icon: Icon,
+  label,
+  value,
+  loading,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: number;
+  loading: boolean;
+}) {
+  const pct = Math.min(value, 100);
+  const color = pct > 88 ? "bg-red-500" : pct > 70 ? "bg-amber-500" : "bg-accent-500";
+
   return (
-    <div className="bg-white rounded-lg border border-neutral-200 p-6">
+    <div className="card-bezel p-6">
       {loading ? (
         <>
-          <div className="skeleton h-4 w-20 mb-2" />
-          <div className="skeleton h-8 w-16 mb-3" />
-          <div className="skeleton h-2 w-full" />
+          <div className="skeleton h-3 w-20 mb-3" />
+          <div className="skeleton h-8 w-16 mb-4" />
+          <div className="skeleton h-1.5 w-full rounded-full" />
         </>
       ) : (
         <>
-          <p className="text-sm text-neutral-600 mb-1">{title}</p>
-          <p className="text-3xl font-bold mb-3">{value}</p>
-          <div className="w-full bg-neutral-200 rounded-full h-2">
-            <div className={`h-2 rounded-full ${barColors[color]}`} style={{ width: `${Math.min(bar, 100)}%` }} />
+          <div className="flex items-center gap-2 mb-2">
+            <Icon className="w-3.5 h-3.5 text-zinc-400" />
+            <span className="text-xs text-zinc-500 font-medium">{label}</span>
+          </div>
+          <div className="flex items-baseline gap-1 mb-4">
+            <span className="text-3xl font-semibold tracking-tight text-zinc-900">
+              {value.toFixed(1)}
+            </span>
+            <span className="text-sm text-zinc-400">%</span>
+          </div>
+          <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+            <div
+              className={`h-full rounded-full ${color} transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]`}
+              style={{ width: `${pct}%` }}
+            />
           </div>
         </>
       )}
@@ -112,12 +158,11 @@ function MetricCard({ title, value, bar, color, loading }: { title: string; valu
   );
 }
 
-// ConfigItem 配置参数展示项
-function ConfigItem({ label, value }: { label: string; value: string | number }) {
+function ConfigRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div>
-      <p className="text-neutral-500">{label}</p>
-      <p className="font-medium">{value}</p>
+    <div className="flex items-center justify-between py-2 border-b border-zinc-100 last:border-0">
+      <span className="text-sm text-zinc-500">{label}</span>
+      <span className="text-sm font-semibold text-zinc-900">{value}</span>
     </div>
   );
 }
