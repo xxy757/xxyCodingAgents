@@ -122,6 +122,8 @@ export interface PromptDraft {
   final_prompt: string;
   task_type: string;
   status: string;
+  run_id?: string;
+  sent_at?: string;
   created_at: string;
   updated_at: string;
 }
@@ -159,7 +161,6 @@ export const pressureColors: Record<string, string> = {
 // draftStatusColors 将草稿状态映射到 Tailwind CSS 类名
 export const draftStatusColors: Record<string, string> = {
   draft: 'bg-warning-50 text-warning-600',
-  confirmed: 'bg-primary-50 text-primary-700',
   sent: 'bg-success-50 text-success-700',
 };
 
@@ -234,12 +235,12 @@ export interface Gate {
   updated_at: string;
 }
 
-// gateStatusColors 将门禁状态映射到 Tailwind CSS 类名
+// gateStatusColors 将门禁状态映射到语义色 Tailwind 类名
 export const gateStatusColors: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
-  passed: 'bg-green-100 text-green-800',
-  failed: 'bg-red-100 text-red-800',
-  skipped: 'bg-gray-200 text-gray-600',
+  pending: 'bg-warning-50 text-warning-600',
+  passed: 'bg-success-50 text-success-700',
+  failed: 'bg-error-50 text-error-700',
+  skipped: 'bg-neutral-200 text-neutral-600',
 };
 
 // approveGate 通过一个门禁

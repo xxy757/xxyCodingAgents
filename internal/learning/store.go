@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -29,6 +30,7 @@ type Entry struct {
 // Store 管理 learnings.jsonl 的落盘与加载。
 type Store struct {
 	rootDir string
+	mu      sync.Mutex // 保护 Append 的并发写入
 }
 
 // NewStore 创建 JSONL 存储器。
@@ -52,6 +54,8 @@ func (s *Store) FilePath(projectSlug string) string {
 
 // Append 追加写入一条学习记录（append-only）。
 func (s *Store) Append(projectSlug string, entry Entry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if strings.TrimSpace(s.rootDir) == "" {
 		return fmt.Errorf("learning store root dir is empty")
 	}

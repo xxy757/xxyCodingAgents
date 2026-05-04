@@ -105,14 +105,23 @@ function PromptDraftsContent() {
     }
   };
 
-  // handleSend 发送草稿
+  // handleSend 发送草稿（发送前自动保存未提交的编辑）
   const handleSend = async (draftId: string) => {
+    // 如果正在编辑的草稿就是要发送的草稿，先保存
+    if (editingDraft && editingDraft.id === draftId && editContent !== (editingDraft.final_prompt || editingDraft.generated_prompt)) {
+      try {
+        await updatePromptDraft(editingDraft.id, editContent, editingDraft.task_type);
+      } catch {
+        setError("自动保存失败，请手动保存后再发送");
+        return;
+      }
+    }
     setLoading(true);
     setError(null);
     setSuccess(null);
     try {
       const result = await sendPromptDraft(draftId);
-      setDrafts(drafts.map((d) => (d.id === draftId ? { ...d, status: "sent" } : d)));
+      setDrafts(drafts.map((d) => (d.id === draftId ? { ...d, status: "sent", run_id: result.run_id } : d)));
       setEditingDraft(null);
       setSuccess(`已发送！Run: ${result.run_id}`);
       setTimeout(() => router.push("/runs"), 2000);
@@ -214,7 +223,7 @@ function PromptDraftsContent() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold">编辑草稿</h2>
             <span className={`px-2 py-1 text-xs rounded-full ${draftStatusColors[editingDraft.status] || "bg-neutral-100"}`}>
-              {editingDraft.status === "draft" ? "草稿" : editingDraft.status === "confirmed" ? "已确认" : "已发送"}
+              {editingDraft.status === "draft" ? "草稿" : "已发送"}
             </span>
           </div>
           <div className="text-xs text-neutral-500 mb-2">
@@ -280,7 +289,7 @@ function PromptDraftsContent() {
                 </div>
                 <div className="flex items-center gap-2 ml-4">
                   <span className={`px-2 py-1.5 text-xs rounded-full ${draftStatusColors[draft.status] || "bg-neutral-100"}`}>
-                    {draft.status === "draft" ? "草稿" : draft.status === "confirmed" ? "已确认" : "已发送"}
+                    {draft.status === "draft" ? "草稿" : "已发送"}
                   </span>
                   {draft.status === "draft" && (
                     <button

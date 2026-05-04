@@ -234,9 +234,8 @@ type CommandLog struct {
 type PromptDraftStatus string
 
 const (
-	PromptDraftStatusDraft     PromptDraftStatus = "draft"     // 草稿，可编辑
-	PromptDraftStatusConfirmed PromptDraftStatus = "confirmed" // 已确认，准备发送
-	PromptDraftStatusSent      PromptDraftStatus = "sent"      // 已发送，Run/Task 已创建
+	PromptDraftStatusDraft PromptDraftStatus = "draft" // 草稿，可编辑
+	PromptDraftStatusSent  PromptDraftStatus = "sent"  // 已发送，Run/Task 已创建
 )
 
 // PromptDraft 表示一个提示词草稿，用户输入经规则模板生成结构化提示词后，
@@ -249,6 +248,8 @@ type PromptDraft struct {
 	FinalPrompt     string            `json:"final_prompt,omitempty" db:"final_prompt"`
 	TaskType        string            `json:"task_type" db:"task_type"`
 	Status          PromptDraftStatus `json:"status" db:"status"`
+	RunID           string            `json:"run_id,omitempty" db:"run_id"`
+	SentAt          *time.Time        `json:"sent_at,omitempty" db:"sent_at"`
 	CreatedAt       time.Time         `json:"created_at" db:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at" db:"updated_at"`
 }

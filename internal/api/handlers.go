@@ -941,6 +941,11 @@ func (s *Server) handleUpdatePromptDraft(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	if strings.TrimSpace(req.FinalPrompt) == "" {
+		writeError(w, http.StatusBadRequest, "final_prompt cannot be empty")
+		return
+	}
+
 	draft.FinalPrompt = req.FinalPrompt
 	if req.TaskType != "" {
 		draft.TaskType = req.TaskType
@@ -956,8 +961,8 @@ func (s *Server) handleUpdatePromptDraft(w http.ResponseWriter, r *http.Request)
 }
 
 // handleSendPromptDraft 处理发送提示词草稿的请求。
-// 将草稿状态更新为 confirmed，创建 Run 和 Task，然后更新为 sent。
-// Task.InputData 取 final_prompt 而非 original_input。
+// 使用 CAS 幂等发送：先创建 Run/Task，再用 WHERE status='draft' 原子更新。
+// 并发请求只会有一个成功创建 Run，其余幂等返回已有结果。
 func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	draft, err := s.repos.PromptDrafts.GetByID(id)
@@ -968,6 +973,16 @@ func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 	}
 	if draft == nil {
 		writeError(w, http.StatusNotFound, "prompt draft not found")
+		return
+	}
+
+	// 已发送的草稿幂等返回（包含关联的 run_id）
+	if draft.Status == domain.PromptDraftStatusSent {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"draft_id": draft.ID,
+			"run_id":   draft.RunID,
+			"status":   "sent",
+		})
 		return
 	}
 	if draft.Status != domain.PromptDraftStatusDraft {
@@ -981,18 +996,11 @@ func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 		finalPrompt = draft.GeneratedPrompt
 	}
 
-	// 生成任务标题：取 final_prompt 首行或原始输入前 50 字符
+	// 生成任务标题
 	title := generateTaskTitle(draft.OriginalInput, finalPrompt)
 
-	// 更新状态为 confirmed
-	if err := s.repos.PromptDrafts.UpdateStatus(draft.ID, domain.PromptDraftStatusConfirmed); err != nil {
-		slog.Error("confirm prompt draft", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to confirm prompt draft")
-		return
-	}
-
-	// 创建 Run 和 Task
-	run, task, err := s.orch.CreateSimpleRun(
+	// 创建 Run 和 Task（不修改 draft 状态）
+	result, err := s.orch.CreateSimpleRun(
 		r.Context(),
 		draft.ProjectID,
 		title,
@@ -1006,17 +1014,28 @@ func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 更新状态为 sent
-	if err := s.repos.PromptDrafts.UpdateStatus(draft.ID, domain.PromptDraftStatusSent); err != nil {
+	// CAS 更新：只有 status='draft' 时才更新，返回受影响行数
+	rowsAffected, err := s.repos.PromptDrafts.MarkSent(draft.ID, result.Run.ID)
+	if err != nil {
 		slog.Error("mark draft as sent", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to mark draft as sent")
+		return
+	}
+	if rowsAffected == 0 {
+		// 并发请求已发送，幂等返回
+		slog.Warn("draft already sent by concurrent request", "draft_id", draft.ID)
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	resp := map[string]any{
 		"draft_id": draft.ID,
-		"run_id":   run.ID,
-		"task_id":  task.ID,
+		"run_id":   result.Run.ID,
+		"task_id":  result.Task.ID,
 		"status":   "sent",
-	})
+	}
+	if len(result.Warnings) > 0 {
+		resp["warnings"] = result.Warnings
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // generateTaskTitle 从原始输入和最终提示词生成任务标题。

@@ -75,8 +75,8 @@ func TestCurrentVersion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("version after migration: %v", err)
 	}
-	if v != 16 {
-		t.Errorf("expected version 16 after migration, got %d", v)
+	if v != 17 {
+		t.Errorf("expected version 17 after migration, got %d", v)
 	}
 }
 

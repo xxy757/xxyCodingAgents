@@ -70,24 +70,24 @@ function TaskNode({ data }: { data: { label: string; status: string; task_type: 
         >
           {data.status || "pending"}
         </span>
-        <span style={{ color: "#6b7280" }}>{data.task_type}</span>
+        <span style={{ color: "#64748b" }}>{data.task_type}</span>
       </div>
       <Handle type="source" position={Position.Bottom} style={{ background: borderColor }} />
     </div>
   );
 }
 
-// gateStatusBorderColor 根据门禁状态返回边框颜色
+// gateStatusBorderColor 根据门禁状态返回边框颜色（使用语义色 Token）
 function gateStatusBorderColor(status: string): string {
   switch (status) {
     case "passed":
-      return "#22c55e";
+      return "#22c55e"; // success-500
     case "failed":
-      return "#ef4444";
+      return "#ef4444"; // error-500
     case "pending":
-      return "#eab308";
+      return "#eab308"; // warning-500
     default:
-      return "#9ca3af";
+      return "#94a3b8"; // neutral-400
   }
 }
 
@@ -100,7 +100,7 @@ function GateNode({ data }: { data: { label: string; status: string; gate_type: 
         padding: "8px 14px",
         borderRadius: 4,
         border: `2px dashed ${borderColor}`,
-        background: data.status === "passed" ? "#f0fdf4" : data.status === "failed" ? "#fef2f2" : "#fefce8",
+        background: data.status === "passed" ? "#f0fdf4" : data.status === "failed" ? "#fef2f2" : "#fefce8", // success-50 / error-50 / warning-50
         minWidth: 120,
         fontSize: 11,
         transform: "rotate(0deg)",
@@ -108,7 +108,7 @@ function GateNode({ data }: { data: { label: string; status: string; gate_type: 
     >
       <Handle type="target" position={Position.Top} style={{ background: borderColor }} />
       <div style={{ fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", gap: 4 }}>
-        <span style={{ color: "#d97706" }}>&#9670;</span>
+        <span style={{ color: "#ca8a04" }}>&#9670;</span>
         {data.label}
       </div>
       <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
@@ -123,7 +123,7 @@ function GateNode({ data }: { data: { label: string; status: string; gate_type: 
         >
           {data.status || "pending"}
         </span>
-        <span style={{ color: "#6b7280", fontSize: 9 }}>{data.gate_type}</span>
+        <span style={{ color: "#64748b", fontSize: 9 }}>{data.gate_type}</span>
       </div>
       {data.gate_type === "manual" && data.status === "pending" && data.onApprove && (
         <button
@@ -132,7 +132,7 @@ function GateNode({ data }: { data: { label: string; status: string; gate_type: 
             marginTop: 4,
             padding: "2px 8px",
             fontSize: 10,
-            background: "#3b82f6",
+            background: "#2563eb", // primary-600
             color: "#fff",
             border: "none",
             borderRadius: 3,
@@ -224,13 +224,13 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     }
   };
 
-  if (!id) return <div className="p-6 text-gray-500">加载中...</div>;
+  if (!id) return <div className="p-6 text-neutral-500">加载中...</div>;
 
   if (error && !run) {
     return (
       <div className="p-6">
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
-        <button onClick={() => router.back()} className="text-blue-600 hover:underline">
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">{error}</div>
+        <button onClick={() => router.back()} className="text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
           返回
         </button>
       </div>
@@ -241,7 +241,7 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
     <div className="p-6">
       {/* 页头：返回按钮、标题和状态 */}
       <div className="flex items-center gap-4 mb-6">
-        <button onClick={() => router.back()} className="text-blue-600 hover:underline text-sm">
+        <button onClick={() => router.back()} className="text-primary-600 hover:underline text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
           ← 返回
         </button>
         <h1 className="text-2xl font-bold">{run?.title || `Run ${id.slice(0, 8)}`}</h1>
@@ -249,31 +249,31 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">{error}</div>
       )}
 
       {/* 标签页切换 */}
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => setActiveTab("tasks")}
-          className={`px-4 py-2 rounded text-sm ${
-            activeTab === "tasks" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          className={`px-4 py-2 rounded text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none ${
+            activeTab === "tasks" ? "bg-primary-600 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
           }`}
         >
           任务列表 ({tasks.length})
         </button>
         <button
           onClick={() => setActiveTab("timeline")}
-          className={`px-4 py-2 rounded text-sm ${
-            activeTab === "timeline" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          className={`px-4 py-2 rounded text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none ${
+            activeTab === "timeline" ? "bg-primary-600 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
           }`}
         >
           事件时间线 ({events.length})
         </button>
         <button
           onClick={() => setActiveTab("workflow")}
-          className={`px-4 py-2 rounded text-sm ${
-            activeTab === "workflow" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+          className={`px-4 py-2 rounded text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none ${
+            activeTab === "workflow" ? "bg-primary-600 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
           }`}
         >
           工作流
@@ -284,55 +284,57 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       {activeTab === "tasks" && (
         <div>
           {tasks.length === 0 ? (
-            <p className="text-gray-500">暂无任务</p>
+            <p className="text-neutral-500">暂无任务</p>
           ) : (
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b text-left text-sm text-gray-600">
-                  <th className="pb-2">ID</th>
-                  <th className="pb-2">标题</th>
-                  <th className="pb-2">类型</th>
-                  <th className="pb-2">状态</th>
-                  <th className="pb-2">优先级</th>
-                  <th className="pb-2">资源</th>
-                  <th className="pb-2">尝试</th>
-                  <th className="pb-2">操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tasks.map((task) => (
-                  <tr key={task.id} className="border-b hover:bg-gray-50">
-                    <td className="py-2 text-sm font-mono">{task.id.slice(0, 8)}</td>
-                    <td className="py-2 text-sm">{task.title}</td>
-                    <td className="py-2 text-sm">{task.task_type}</td>
-                    <td className="py-2 text-sm">
-                      <StatusBadge status={task.status} />
-                    </td>
-                    <td className="py-2 text-sm">{task.priority}</td>
-                    <td className="py-2 text-sm">{task.resource_class}</td>
-                    <td className="py-2 text-sm">{task.attempt_no}</td>
-                    <td className="py-2 text-sm space-x-2">
-                      {(task.status === "failed" || task.status === "evicted") && (
-                        <button
-                          onClick={() => handleRetry(task.id)}
-                          className="text-blue-600 hover:underline"
-                        >
-                          重试
-                        </button>
-                      )}
-                      {(task.status === "queued" || task.status === "running") && (
-                        <button
-                          onClick={() => handleCancel(task.id)}
-                          className="text-red-600 hover:underline"
-                        >
-                          取消
-                        </button>
-                      )}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="border-b border-neutral-200 text-left text-sm text-neutral-600">
+                    <th className="pb-2">ID</th>
+                    <th className="pb-2">标题</th>
+                    <th className="pb-2">类型</th>
+                    <th className="pb-2">状态</th>
+                    <th className="pb-2">优先级</th>
+                    <th className="pb-2">资源</th>
+                    <th className="pb-2">尝试</th>
+                    <th className="pb-2">操作</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {tasks.map((task) => (
+                    <tr key={task.id} className="border-b border-neutral-100 hover:bg-neutral-50">
+                      <td className="py-2 text-sm font-mono">{task.id.slice(0, 8)}</td>
+                      <td className="py-2 text-sm">{task.title}</td>
+                      <td className="py-2 text-sm">{task.task_type}</td>
+                      <td className="py-2 text-sm">
+                        <StatusBadge status={task.status} />
+                      </td>
+                      <td className="py-2 text-sm">{task.priority}</td>
+                      <td className="py-2 text-sm">{task.resource_class}</td>
+                      <td className="py-2 text-sm">{task.attempt_no}</td>
+                      <td className="py-2 text-sm space-x-2">
+                        {(task.status === "failed" || task.status === "evicted") && (
+                          <button
+                            onClick={() => handleRetry(task.id)}
+                            className="text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded"
+                          >
+                            重试
+                          </button>
+                        )}
+                        {(task.status === "queued" || task.status === "running") && (
+                          <button
+                            onClick={() => handleCancel(task.id)}
+                            className="text-error-600 hover:underline focus-visible:ring-2 focus-visible:ring-error-500 focus-visible:outline-none rounded"
+                          >
+                            取消
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -341,21 +343,21 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       {activeTab === "timeline" && (
         <div>
           {events.length === 0 ? (
-            <p className="text-gray-500">暂无事件</p>
+            <p className="text-neutral-500">暂无事件</p>
           ) : (
             <div className="space-y-3">
               {events.map((event) => (
-                <div key={event.id} className="flex items-start gap-3 p-3 bg-gray-50 rounded">
-                  <div className="text-xs text-gray-400 min-w-[140px] pt-0.5">
+                <div key={event.id} className="flex items-start gap-3 p-3 bg-neutral-50 rounded-lg border border-neutral-200">
+                  <div className="text-xs text-neutral-400 min-w-[140px] pt-0.5">
                     {new Date(event.created_at).toLocaleString()}
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">{event.event_type}</span>
+                      <span className="px-1.5 py-0.5 bg-neutral-200 rounded text-xs">{event.event_type}</span>
                       <span className="text-sm">{event.message}</span>
                     </div>
                     {event.task_id && (
-                      <div className="text-xs text-gray-400 mt-1">
+                      <div className="text-xs text-neutral-400 mt-1">
                         Task: {event.task_id.slice(0, 8)}
                         {event.agent_id && ` | Agent: ${event.agent_id.slice(0, 8)}`}
                       </div>
@@ -372,9 +374,9 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
       {activeTab === "workflow" && (
         <div>
           {!workflowGraph || workflowGraph.nodes.length === 0 ? (
-            <p className="text-gray-500">暂无工作流数据</p>
+            <p className="text-neutral-500">暂无工作流数据</p>
           ) : (
-            <div style={{ width: "100%", height: 500, border: "1px solid #e5e7eb", borderRadius: 8 }}>
+            <div style={{ width: "100%", height: 500, border: "1px solid #e2e8f0", borderRadius: 8 }}>
               <ReactFlow
                 nodes={workflowGraph.nodes.map((n) => ({
                   id: n.id,
@@ -390,14 +392,14 @@ export default function RunDetailPage({ params }: { params: Promise<{ id: string
                   source: e.source,
                   target: e.target,
                   animated: true,
-                  style: { stroke: "#94a3b8", strokeWidth: 2 },
+                  style: { stroke: "#94a3b8", strokeWidth: 2 }, // neutral-400
                 }))}
                 nodeTypes={nodeTypes}
                 fitView
                 minZoom={0.3}
                 maxZoom={2}
               >
-                <Background color="#e5e7eb" gap={16} />
+                <Background color="#e2e8f0" gap={16} />
                 <Controls />
                 <MiniMap
                   nodeColor={(node) => statusBorderColor((node.data as any)?.status || "")}

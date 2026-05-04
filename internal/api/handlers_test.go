@@ -680,3 +680,207 @@ func TestE2E_RunFailureAbort(t *testing.T) {
 		t.Errorf("expected run failed (abort on failure), got %s", runAfter.Status)
 	}
 }
+
+// ==================== Prompt Draft 测试 ====================
+
+func putReq(t *testing.T, path string, body any) *http.Request {
+	t.Helper()
+	b, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest("PUT", path, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	return req
+}
+
+func TestAPI_GeneratePromptDraft(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	req := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+		"project_id":     "p1",
+		"original_input": "修复登录页面的样式问题",
+	})
+	w := serveHTTP(srv, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var draft domain.PromptDraft
+	if err := json.Unmarshal(w.Body.Bytes(), &draft); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if draft.Status != domain.PromptDraftStatusDraft {
+		t.Errorf("expected status draft, got %s", draft.Status)
+	}
+	if draft.TaskType != "bugfix" {
+		t.Errorf("expected task_type bugfix, got %s", draft.TaskType)
+	}
+	if draft.GeneratedPrompt == "" {
+		t.Error("expected non-empty generated_prompt")
+	}
+}
+
+func TestAPI_GeneratePromptDraft_MissingInput(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	req := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+		"project_id": "p1",
+	})
+	w := serveHTTP(srv, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", w.Code)
+	}
+}
+
+func TestAPI_GeneratePromptDraft_ProjectNotFound(t *testing.T) {
+	srv, _, _ := setupAPITest(t)
+
+	req := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+		"project_id":     "nonexistent",
+		"original_input": "test",
+	})
+	w := serveHTTP(srv, req)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", w.Code)
+	}
+}
+
+func TestAPI_UpdatePromptDraft(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	genReq := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+		"project_id":     "p1",
+		"original_input": "添加暗色模式",
+	})
+	genW := serveHTTP(srv, genReq)
+	var draft domain.PromptDraft
+	json.Unmarshal(genW.Body.Bytes(), &draft)
+
+	updateReq := putReq(t, "/api/prompt-drafts/"+draft.ID, map[string]string{
+		"final_prompt": "自定义的 prompt 内容",
+		"task_type":    "build",
+	})
+	updateW := serveHTTP(srv, updateReq)
+	if updateW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", updateW.Code, updateW.Body.String())
+	}
+
+	var updated domain.PromptDraft
+	json.Unmarshal(updateW.Body.Bytes(), &updated)
+	if updated.FinalPrompt != "自定义的 prompt 内容" {
+		t.Errorf("expected final_prompt updated, got %s", updated.FinalPrompt)
+	}
+}
+
+func TestAPI_UpdatePromptDraft_EmptyPrompt(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	genReq := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+		"project_id":     "p1",
+		"original_input": "test",
+	})
+	genW := serveHTTP(srv, genReq)
+	var draft domain.PromptDraft
+	json.Unmarshal(genW.Body.Bytes(), &draft)
+
+	updateReq := putReq(t, "/api/prompt-drafts/"+draft.ID, map[string]string{
+		"final_prompt": "   ",
+	})
+	updateW := serveHTTP(srv, updateReq)
+	if updateW.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty prompt, got %d", updateW.Code)
+	}
+}
+
+func TestAPI_SendPromptDraft(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", RepoURL: "", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	genReq := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+		"project_id":     "p1",
+		"original_input": "写单元测试",
+	})
+	genW := serveHTTP(srv, genReq)
+	var draft domain.PromptDraft
+	json.Unmarshal(genW.Body.Bytes(), &draft)
+
+	sendReq := postReq(t, "/api/prompt-drafts/"+draft.ID+"/send", nil)
+	sendW := serveHTTP(srv, sendReq)
+	if sendW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", sendW.Code, sendW.Body.String())
+	}
+
+	var result map[string]string
+	json.Unmarshal(sendW.Body.Bytes(), &result)
+	if result["status"] != "sent" {
+		t.Errorf("expected status sent, got %s", result["status"])
+	}
+	if result["run_id"] == "" {
+		t.Error("expected non-empty run_id")
+	}
+
+	draftAfter, _ := repos.PromptDrafts.GetByID(draft.ID)
+	if draftAfter.Status != domain.PromptDraftStatusSent {
+		t.Errorf("expected draft status sent, got %s", draftAfter.Status)
+	}
+}
+
+func TestAPI_SendPromptDraft_NonDraft(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	draft := &domain.PromptDraft{
+		ID:              "draft-sent",
+		ProjectID:       "p1",
+		OriginalInput:   "test",
+		GeneratedPrompt: "prompt",
+		TaskType:        "build",
+		Status:          domain.PromptDraftStatusSent,
+		RunID:           "existing-run",
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
+	repos.PromptDrafts.Create(draft)
+
+	// CAS 幂等：已 sent 的草稿重复发送返回 200 + 已有 run_id
+	sendReq := postReq(t, "/api/prompt-drafts/draft-sent/send", nil)
+	sendW := serveHTTP(srv, sendReq)
+	if sendW.Code != http.StatusOK {
+		t.Errorf("expected 200 for idempotent re-send, got %d", sendW.Code)
+	}
+	var resp map[string]any
+	json.NewDecoder(sendW.Body).Decode(&resp)
+	if resp["run_id"] != "existing-run" {
+		t.Errorf("expected existing run_id, got %v", resp["run_id"])
+	}
+}
+
+func TestAPI_ListPromptDrafts(t *testing.T) {
+	srv, repos, _ := setupAPITest(t)
+	repos.Projects.Create(&domain.Project{ID: "p1", Name: "test", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	for _, input := range []string{"任务一", "任务二"} {
+		req := postReq(t, "/api/prompt-drafts/generate", map[string]string{
+			"project_id":     "p1",
+			"original_input": input,
+		})
+		serveHTTP(srv, req)
+	}
+
+	listReq := getReq(t, "/api/prompt-drafts?project_id=p1")
+	listW := serveHTTP(srv, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", listW.Code)
+	}
+
+	var drafts []domain.PromptDraft
+	json.Unmarshal(listW.Body.Bytes(), &drafts)
+	if len(drafts) != 2 {
+		t.Errorf("expected 2 drafts, got %d", len(drafts))
+	}
+}

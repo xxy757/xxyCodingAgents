@@ -908,8 +908,8 @@ func NewPromptDraftRepo(db *DB) *PromptDraftRepo {
 // Create 插入一个新的提示词草稿记录。
 func (r *PromptDraftRepo) Create(d *domain.PromptDraft) error {
 	_, err := r.db.Exec(
-		"INSERT INTO prompt_drafts (id, project_id, original_input, generated_prompt, final_prompt, task_type, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		d.ID, d.ProjectID, d.OriginalInput, d.GeneratedPrompt, d.FinalPrompt, d.TaskType, d.Status, d.CreatedAt, d.UpdatedAt,
+		"INSERT INTO prompt_drafts (id, project_id, original_input, generated_prompt, final_prompt, task_type, status, run_id, sent_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		d.ID, d.ProjectID, d.OriginalInput, d.GeneratedPrompt, d.FinalPrompt, d.TaskType, d.Status, d.RunID, d.SentAt, d.CreatedAt, d.UpdatedAt,
 	)
 	return err
 }
@@ -918,8 +918,8 @@ func (r *PromptDraftRepo) Create(d *domain.PromptDraft) error {
 func (r *PromptDraftRepo) GetByID(id string) (*domain.PromptDraft, error) {
 	d := &domain.PromptDraft{}
 	err := r.db.QueryRow(
-		"SELECT id, project_id, original_input, generated_prompt, final_prompt, task_type, status, created_at, updated_at FROM prompt_drafts WHERE id = ?", id,
-	).Scan(&d.ID, &d.ProjectID, &d.OriginalInput, &d.GeneratedPrompt, &d.FinalPrompt, &d.TaskType, &d.Status, &d.CreatedAt, &d.UpdatedAt)
+		"SELECT id, project_id, original_input, generated_prompt, final_prompt, task_type, status, run_id, sent_at, created_at, updated_at FROM prompt_drafts WHERE id = ?", id,
+	).Scan(&d.ID, &d.ProjectID, &d.OriginalInput, &d.GeneratedPrompt, &d.FinalPrompt, &d.TaskType, &d.Status, &d.RunID, &d.SentAt, &d.CreatedAt, &d.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -929,7 +929,7 @@ func (r *PromptDraftRepo) GetByID(id string) (*domain.PromptDraft, error) {
 // ListByProject 查询指定项目的所有草稿，按创建时间降序排列。
 func (r *PromptDraftRepo) ListByProject(projectID string) ([]*domain.PromptDraft, error) {
 	rows, err := r.db.Query(
-		"SELECT id, project_id, original_input, generated_prompt, final_prompt, task_type, status, created_at, updated_at FROM prompt_drafts WHERE project_id = ? ORDER BY created_at DESC", projectID,
+		"SELECT id, project_id, original_input, generated_prompt, final_prompt, task_type, status, run_id, sent_at, created_at, updated_at FROM prompt_drafts WHERE project_id = ? ORDER BY created_at DESC", projectID,
 	)
 	if err != nil {
 		return nil, err
@@ -938,7 +938,7 @@ func (r *PromptDraftRepo) ListByProject(projectID string) ([]*domain.PromptDraft
 	var drafts []*domain.PromptDraft
 	for rows.Next() {
 		d := &domain.PromptDraft{}
-		if err := rows.Scan(&d.ID, &d.ProjectID, &d.OriginalInput, &d.GeneratedPrompt, &d.FinalPrompt, &d.TaskType, &d.Status, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		if err := rows.Scan(&d.ID, &d.ProjectID, &d.OriginalInput, &d.GeneratedPrompt, &d.FinalPrompt, &d.TaskType, &d.Status, &d.RunID, &d.SentAt, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, err
 		}
 		drafts = append(drafts, d)
@@ -962,6 +962,20 @@ func (r *PromptDraftRepo) UpdateStatus(id string, status domain.PromptDraftStatu
 		status, time.Now(), id,
 	)
 	return err
+}
+
+// MarkSent CAS 更新草稿为 sent 状态，同时写入 run_id 和 sent_at。
+// 只有当前状态为 draft 的草稿才会被更新，返回受影响行数（0 表示已被其他请求发送）。
+func (r *PromptDraftRepo) MarkSent(id string, runID string) (int64, error) {
+	now := time.Now()
+	result, err := r.db.Exec(
+		"UPDATE prompt_drafts SET status = ?, run_id = ?, sent_at = ?, updated_at = ? WHERE id = ? AND status = ?",
+		domain.PromptDraftStatusSent, runID, now, now, id, domain.PromptDraftStatusDraft,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 // ==================== GateRepo ====================

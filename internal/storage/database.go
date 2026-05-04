@@ -75,6 +75,7 @@ func (db *DB) RunMigrations() error {
 		{"indexes", migrateIndexes},
 		{"prompt_drafts", migratePromptDrafts},
 		{"gates", migrateGates},
+		{"prompt_drafts_run_link", migratePromptDraftsRunLink},
 	}
 
 	for i, m := range migrations {
@@ -366,3 +367,9 @@ CREATE TABLE IF NOT EXISTS gates (
     FOREIGN KEY (run_id) REFERENCES runs(id)
 );
 CREATE INDEX IF NOT EXISTS idx_gates_run_status ON gates(run_id, status);`
+
+// migratePromptDraftsRunLink 为 prompt_drafts 表添加 run_id 和 sent_at 字段，
+// 用于追溯草稿发送后创建的 Run，以及实现幂等发送。
+const migratePromptDraftsRunLink = `
+ALTER TABLE prompt_drafts ADD COLUMN run_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE prompt_drafts ADD COLUMN sent_at DATETIME;`

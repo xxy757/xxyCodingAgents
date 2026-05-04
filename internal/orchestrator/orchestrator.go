@@ -55,10 +55,17 @@ func (o *Orchestrator) CreateRun(ctx context.Context, projectID, templateID, tit
 	return run, nil
 }
 
+// SimpleRunResult 封装 CreateSimpleRun 的返回结果。
+type SimpleRunResult struct {
+	Run      *domain.Run
+	Task     *domain.Task
+	Warnings []string // 非致命警告（如工作区克隆失败）
+}
+
 // CreateSimpleRun 创建一个简单运行，只包含单个任务，不需要工作流模板。
 // 用于 Prompt Composer 场景：用户确认草稿后直接创建 Run + Task。
 // Task.InputData 取 final_prompt 而非 original_input。
-func (o *Orchestrator) CreateSimpleRun(ctx context.Context, projectID, title, description, inputData, taskType string) (*domain.Run, *domain.Task, error) {
+func (o *Orchestrator) CreateSimpleRun(ctx context.Context, projectID, title, description, inputData, taskType string) (*SimpleRunResult, error) {
 	run := &domain.Run{
 		ID:        uuid.New().String(),
 		ProjectID: projectID,
@@ -68,20 +75,24 @@ func (o *Orchestrator) CreateSimpleRun(ctx context.Context, projectID, title, de
 		UpdatedAt: time.Now(),
 	}
 	if err := o.repos.Runs.Create(run); err != nil {
-		return nil, nil, fmt.Errorf("create run: %w", err)
+		return nil, fmt.Errorf("create run: %w", err)
 	}
 
 	// 为运行创建工作区（克隆项目仓库）
 	var workspacePath string
+	var warnings []string
 	project, _ := o.repos.Projects.GetByID(projectID)
 	if project != nil && project.RepoURL != "" && o.gitManager != nil {
 		wsDir, err := o.gitManager.CreateWorkspace(ctx, run.ID)
 		if err == nil {
 			if err := o.gitManager.Clone(ctx, project.RepoURL, wsDir); err != nil {
+				warnings = append(warnings, fmt.Sprintf("仓库克隆失败，任务将在无代码上下文中运行: %v", err))
 				slog.Warn("clone repo for simple run, continuing with empty workspace", "run_id", run.ID, "error", err)
 			} else {
 				workspacePath = wsDir
 			}
+		} else {
+			warnings = append(warnings, fmt.Sprintf("创建工作区失败: %v", err))
 		}
 	}
 
@@ -104,19 +115,22 @@ func (o *Orchestrator) CreateSimpleRun(ctx context.Context, projectID, title, de
 		UpdatedAt:     time.Now(),
 	}
 	if err := o.repos.Tasks.Create(task); err != nil {
-		return nil, nil, fmt.Errorf("create task: %w", err)
+		return nil, fmt.Errorf("create task: %w", err)
 	}
 
 	o.emitEvent(ctx, run.ID, &task.ID, nil, domain.EventTypeTaskStarted, "simple run created")
-	return run, task, nil
+	return &SimpleRunResult{Run: run, Task: task, Warnings: warnings}, nil
 }
 
 // instantiateWorkflow 根据工作流模板实例化任务节点和依赖关系。
 // 会检测工作流中的环，发现环时清除所有边以避免死锁。
 func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run) error {
 	template, err := o.repos.WorkflowTemplates.GetByID(run.WorkflowTemplateID)
-	if err != nil || template == nil {
+	if err != nil {
 		return err
+	}
+	if template == nil {
+		return fmt.Errorf("workflow template not found: %s", run.WorkflowTemplateID)
 	}
 
 	// 解析节点和边

@@ -126,13 +126,13 @@ export default function TerminalDetailPage({ params }: { params: Promise<{ id: s
     };
   }, [session]);
 
-  if (!id) return <div className="p-6 text-gray-500">加载中...</div>;
+  if (!id) return <div className="p-6 text-neutral-500">加载中...</div>;
 
   if (error) {
     return (
       <div className="p-6">
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">{error}</div>
-        <button onClick={() => router.back()} className="text-blue-600 hover:underline">
+        <div role="alert" className="mb-4 p-3 bg-error-50 border border-error-500 rounded text-error-700 text-sm">{error}</div>
+        <button onClick={() => router.back()} className="text-primary-600 hover:underline focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
           返回
         </button>
       </div>
@@ -144,14 +144,14 @@ export default function TerminalDetailPage({ params }: { params: Promise<{ id: s
       {/* 页头：返回按钮、标题和状态 */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
-          <button onClick={() => router.back()} className="text-blue-600 hover:underline text-sm">
+          <button onClick={() => router.back()} className="text-primary-600 hover:underline text-sm focus-visible:ring-2 focus-visible:ring-primary-400 focus-visible:outline-none rounded">
             ← 返回
           </button>
           <h1 className="text-xl font-bold">终端 {id.slice(0, 8)}</h1>
           {session && <StatusBadge status={session.status} />}
         </div>
         {session && (
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-neutral-500">
             tmux: <span className="font-mono">{session.tmux_session}</span>
           </div>
         )}
@@ -160,7 +160,7 @@ export default function TerminalDetailPage({ params }: { params: Promise<{ id: s
       {/* xterm.js 终端容器 */}
       <div
         ref={terminalRef}
-        className="flex-1 rounded-lg overflow-hidden border border-gray-700"
+        className="flex-1 rounded-lg overflow-hidden border border-neutral-700"
         style={{ minHeight: "500px" }}
       />
     </div>

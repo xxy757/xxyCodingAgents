@@ -499,6 +499,7 @@ func (s *Scheduler) checkTaskCompletion(ctx context.Context, activeAgents []stor
 			}
 			s.clearTaskCanary(entry.Task.ID)
 			s.cleanupTaskArtifacts(entry.Task.ID)
+			s.appendSuccessLearning(entry.Task)
 			slog.Info("task completed (detected from output)", "task_id", entry.Task.ID, "agent_id", entry.Agent.ID)
 		} else if strings.Contains(output, "[TASK_FAILED]") {
 			s.repos.AgentInstances.UpdateStatus(entry.Agent.ID, domain.AgentStatusFailed)
@@ -1205,6 +1206,37 @@ func (s *Scheduler) appendFailureLearning(task *domain.Task, reason string) {
 	}
 	if err := s.learningStore.Append(projectSlug, entry); err != nil {
 		slog.Warn("append failure learning failed", "task_id", task.ID, "project_slug", projectSlug, "error", err)
+	}
+}
+
+func (s *Scheduler) appendSuccessLearning(task *domain.Task) {
+	if task == nil || s.learningStore == nil {
+		return
+	}
+
+	projectSlug := s.resolveLearningProjectSlug(task)
+	branch, gitStatus := collectGitStateForPrompt(context.Background(), task.WorkspacePath)
+	commit := strings.TrimSpace(runCommandForPrompt(context.Background(), "git", "-C", task.WorkspacePath, "rev-parse", "HEAD"))
+
+	insight := fmt.Sprintf("task completed successfully: %s", strings.TrimSpace(task.Title))
+	if len(insight) > 800 {
+		insight = insight[:800] + "...(truncated)"
+	}
+
+	entry := learningengine.Entry{
+		TS:         time.Now().UTC().Format(time.RFC3339),
+		Skill:      strings.ToLower(strings.TrimSpace(task.TaskType)),
+		Type:       "pattern",
+		Key:        "task-success-" + strings.ToLower(strings.TrimSpace(task.TaskType)),
+		Insight:    insight,
+		Confidence: 8,
+		Source:     "observed",
+		Branch:     branch,
+		Commit:     commit,
+		Files:      extractFilesFromGitStatus(gitStatus),
+	}
+	if err := s.learningStore.Append(projectSlug, entry); err != nil {
+		slog.Warn("append success learning failed", "task_id", task.ID, "project_slug", projectSlug, "error", err)
 	}
 }
 
