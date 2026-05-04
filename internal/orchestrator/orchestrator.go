@@ -200,10 +200,22 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 		if err == nil {
 			if err := o.gitManager.Clone(ctx, project.RepoURL, wsDir); err != nil {
 				slog.Warn("clone repo for run, continuing with empty workspace", "run_id", run.ID, "repo", project.RepoURL, "error", err)
+				if tmpDir, tmpErr := os.MkdirTemp("", "run-"+run.ID+"-"); tmpErr == nil {
+					workspacePath = tmpDir
+					slog.Info("created temp workspace for run", "run_id", run.ID, "path", tmpDir)
+				}
 			} else {
 				workspacePath = wsDir
 				slog.Info("workspace cloned for run", "run_id", run.ID, "path", wsDir)
 			}
+		}
+	}
+
+	// 无仓库时创建临时工作区，避免 launcher 脚本 cd "" 失败
+	if workspacePath == "" {
+		if tmpDir, tmpErr := os.MkdirTemp("", "run-"+run.ID+"-"); tmpErr == nil {
+			workspacePath = tmpDir
+			slog.Info("created temp workspace for run (no repo)", "run_id", run.ID, "path", tmpDir)
 		}
 	}
 
