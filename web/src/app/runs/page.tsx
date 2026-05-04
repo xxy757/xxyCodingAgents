@@ -29,7 +29,7 @@ export default function RunsPage() {
     setLoading(true);
     apiFetch<Run[]>("/api/runs")
       .then(setRuns)
-      .catch(() => setRuns([]))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
     apiFetch<Project[]>("/api/projects").then(setProjects).catch(() => {});
     apiFetch<WorkflowTemplate[]>("/api/workflow-templates").then(setTemplates).catch(() => {});

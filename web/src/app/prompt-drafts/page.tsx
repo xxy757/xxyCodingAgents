@@ -66,7 +66,7 @@ function PromptDraftsContent() {
 
   useEffect(() => {
     if (!selectedProjectId) return;
-    listPromptDrafts(selectedProjectId).then(setDrafts).catch(() => setDrafts([]));
+    listPromptDrafts(selectedProjectId).then(setDrafts).catch((e) => setError(e.message));
   }, [selectedProjectId]);
 
   const handleGenerate = async () => {

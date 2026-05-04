@@ -11,6 +11,17 @@ import {
   Clock,
 } from "@phosphor-icons/react/dist/ssr";
 
+function repoDisplayPath(url: string): string {
+  try {
+    return new URL(url).pathname.slice(1).replace(/\.git$/, "");
+  } catch {
+    // SSH 格式 git@host:org/repo.git 或本地路径
+    const ssh = url.match(/[^:]+:(.+)/);
+    if (ssh) return ssh[1].replace(/\.git$/, "");
+    return url;
+  }
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -24,7 +35,7 @@ export default function ProjectsPage() {
   useEffect(() => {
     apiFetch<Project[]>("/api/projects")
       .then(setProjects)
-      .catch(() => setProjects([]))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
@@ -163,7 +174,7 @@ export default function ProjectsPage() {
                 {p.repo_url && (
                   <span className="flex items-center gap-1">
                     <GitBranch className="w-3 h-3" />
-                    {new URL(p.repo_url).pathname.slice(1)}
+                    {repoDisplayPath(p.repo_url)}
                   </span>
                 )}
                 <span className="flex items-center gap-1">

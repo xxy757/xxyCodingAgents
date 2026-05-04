@@ -24,7 +24,7 @@ export default function TerminalsPage() {
   useEffect(() => {
     apiFetch<TerminalSession[]>("/api/terminals")
       .then(setTerminals)
-      .catch(() => setTerminals([]))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 

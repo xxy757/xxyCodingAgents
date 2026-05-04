@@ -21,7 +21,7 @@ export default function AgentsPage() {
   useEffect(() => {
     apiFetch<AgentInstance[]>("/api/agents")
       .then(setAgents)
-      .catch(() => setAgents([]))
+      .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
 
