@@ -543,6 +543,12 @@ func (s *Server) handleResumeAgent(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to resume agent")
 		return
 	}
+	// 同步更新关联任务状态（从 evicted 恢复为 running）
+	if agent.TaskID != "" {
+		if err := s.repos.Tasks.UpdateStatus(agent.TaskID, domain.TaskStatusRunning); err != nil {
+			slog.Warn("update task status on resume", "agent_id", id, "task_id", agent.TaskID, "error", err)
+		}
+	}
 	agent.Status = domain.AgentStatusRunning
 	writeJSON(w, http.StatusOK, agent)
 }

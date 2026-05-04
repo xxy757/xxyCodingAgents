@@ -172,9 +172,25 @@ func (a *GenericShellAdapter) Stop(ctx context.Context, tmuxSession string) erro
 	return exec.CommandContext(ctx, "tmux", "kill-session", "-t", tmuxSession).Run()
 }
 
-// Checkpoint 返回空检查点（通用 Shell 不支持真实检查点）。
-func (a *GenericShellAdapter) Checkpoint(ctx context.Context, agentID string) (*CheckpointData, error) {
-	return &CheckpointData{Phase: "unknown", StateData: "{}"}, nil
+// Checkpoint 创建 Agent 状态快照，捕获 tmux 终端输出和运行状态。
+func (a *GenericShellAdapter) Checkpoint(ctx context.Context, tmuxSession string) (*CheckpointData, error) {
+	output := ""
+	if tmuxSession != "" {
+		out, err := exec.CommandContext(ctx, "tmux", "capture-pane", "-t", tmuxSession, "-p", "-S", "-100").Output()
+		if err == nil {
+			output = string(out)
+		}
+	}
+	status := AgentStatus{Running: false}
+	inspectResult, err := a.Inspect(ctx, tmuxSession)
+	if err == nil {
+		status = *inspectResult
+	}
+	stateData := fmt.Sprintf(`{"tmux_output_length":%d,"running":%v}`, len(output), status.Running)
+	return &CheckpointData{
+		Phase:     "running",
+		StateData: stateData,
+	}, nil
 }
 
 // Inspect 检查 tmux 会话是否存在。

@@ -163,6 +163,7 @@ func (s *Scheduler) tick(ctx context.Context) {
 
 	// 根据压力等级调度任务
 	if level == PressureNormal {
+		s.resumePausedAgents(ctx)
 		s.scheduleTasks(ctx, activeCount, activeAgents)
 	} else if level == PressureWarn {
 		s.scheduleTasksLightOnly(ctx, activeCount, activeAgents)
@@ -224,6 +225,45 @@ func (s *Scheduler) pauseLowPriorityAgents(ctx context.Context, activeAgents []s
 	}
 }
 
+// resumePausedAgents 当压力恢复正常时，自动恢复所有暂停的 Agent。
+func (s *Scheduler) resumePausedAgents(ctx context.Context) {
+	agents, err := s.repos.AgentInstances.ListByStatus(domain.AgentStatusPaused)
+	if err != nil || len(agents) == 0 {
+		return
+	}
+	for _, agent := range agents {
+		rt := s.runtimeRegistry.GetOrDefault(agent.AgentKind)
+		// 检查 tmux 会话是否仍然存活
+		inspect, err := rt.Inspect(ctx, agent.TmuxSession)
+		if err != nil || !inspect.Running {
+			s.repos.AgentInstances.UpdateStatus(agent.ID, domain.AgentStatusFailed)
+			if agent.TaskID != "" {
+				s.repos.Tasks.UpdateStatus(agent.TaskID, domain.TaskStatusFailed)
+			}
+			slog.Warn("paused agent tmux session gone, marking failed", "agent_id", agent.ID)
+			continue
+		}
+		if err := rt.Resume(ctx, agent.TmuxSession); err != nil {
+			slog.Error("resume paused agent", "agent_id", agent.ID, "error", err)
+			continue
+		}
+		s.repos.AgentInstances.UpdateStatus(agent.ID, domain.AgentStatusRunning)
+		if agent.TaskID != "" {
+			s.repos.Tasks.UpdateStatus(agent.TaskID, domain.TaskStatusRunning)
+		}
+		s.repos.Events.Create(&domain.Event{
+			ID:        uuid.New().String(),
+			RunID:     agent.RunID,
+			TaskID:    ptrString(agent.TaskID),
+			AgentID:   ptrString(agent.ID),
+			EventType: domain.EventTypeAgentResumed,
+			Message:   fmt.Sprintf("Agent %s auto-resumed, pressure returned to normal", agent.ID[:8]),
+			CreatedAt: time.Now(),
+		})
+		slog.Info("agent auto-resumed", "agent_id", agent.ID, "task_id", agent.TaskID)
+	}
+}
+
 // evictAgents 在临界压力时先创建检查点再驱逐所有可抢占的 Agent。
 func (s *Scheduler) evictAgents(ctx context.Context, activeAgents []storage.ActiveAgentsResult) {
 	for _, entry := range activeAgents {
@@ -237,7 +277,7 @@ func (s *Scheduler) evictAgents(ctx context.Context, activeAgents []storage.Acti
 		rt := s.runtimeRegistry.GetOrDefault(entry.Agent.AgentKind)
 
 		// 驱逐前尝试创建检查点
-		cp, err := rt.Checkpoint(ctx, entry.Agent.ID)
+		cp, err := rt.Checkpoint(ctx, entry.Agent.TmuxSession)
 		if err != nil {
 			slog.Warn("checkpoint before eviction failed", "agent_id", entry.Agent.ID, "error", err)
 		}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 	"time"
@@ -93,6 +94,17 @@ func (o *Orchestrator) CreateSimpleRun(ctx context.Context, projectID, title, de
 			}
 		} else {
 			warnings = append(warnings, fmt.Sprintf("创建工作区失败: %v", err))
+		}
+	}
+
+	// 无 repo 时创建临时工作区，避免 launcher 脚本 cd "" 失败
+	if workspacePath == "" {
+		tempDir, err := os.MkdirTemp("", fmt.Sprintf("agent-ws-%s-", run.ID[:8]))
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("create temp workspace failed: %v", err))
+		} else {
+			workspacePath = tempDir
+			slog.Info("created temp workspace for run without repo", "run_id", run.ID, "path", tempDir)
 		}
 	}
 

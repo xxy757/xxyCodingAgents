@@ -209,4 +209,37 @@ func seedDefaultWorkflowTemplate(repos *storage.Repos) {
 			}
 		}
 	}
+
+	// 同步创建 AgentSpec 种子数据（如果不存在）
+	agentSpecs := []domain.AgentSpec{
+		{
+			ID:                 "agent-spec-claude-code",
+			Name:               "Claude Code Agent",
+			AgentKind:          "claude-code",
+			SupportedTaskTypes: "think,plan,review,retro,build,qa,ship",
+			DefaultCommand:     "claude",
+			MaxConcurrency:     3,
+			ResourceWeight:     1.0,
+			HeartbeatMode:      "process",
+			OutputParser:       "marker",
+		},
+		{
+			ID:                 "agent-spec-generic-shell",
+			Name:               "Generic Shell Agent",
+			AgentKind:          "generic-shell",
+			SupportedTaskTypes: "build,test,deploy,docs",
+			DefaultCommand:     "/bin/bash",
+			MaxConcurrency:     5,
+			ResourceWeight:     0.5,
+			HeartbeatMode:      "process",
+			OutputParser:       "exit-code",
+		},
+	}
+	for _, spec := range agentSpecs {
+		if existing, _ := repos.AgentSpecs.GetByKind(spec.AgentKind); existing == nil {
+			if err := repos.AgentSpecs.Create(&spec); err != nil {
+				slog.Warn("seed agent spec", "kind", spec.AgentKind, "error", err)
+			}
+		}
+	}
 }
