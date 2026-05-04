@@ -532,8 +532,10 @@ func (s *Scheduler) checkTaskCompletion(ctx context.Context, activeAgents []stor
 		if strings.Contains(output, "[TASK_COMPLETED]") {
 			s.repos.AgentInstances.UpdateStatus(entry.Agent.ID, domain.AgentStatusStopped)
 			s.repos.AgentInstances.UpdateLastOutputAt(entry.Agent.ID)
+			// 提取标记之前的输出作为任务结果
+			taskOutput := extractOutputBeforeMarker(output, "[TASK_COMPLETED]")
 			if s.orch != nil {
-				if err := s.orch.CompleteTask(ctx, entry.Task.ID, ""); err != nil {
+				if err := s.orch.CompleteTask(ctx, entry.Task.ID, taskOutput); err != nil {
 					slog.Error("complete task", "task_id", entry.Task.ID, "error", err)
 				}
 			}
@@ -768,9 +770,9 @@ func (s *Scheduler) resolveAgentKind(task *domain.Task) string {
 		}
 	}
 
-	// 根据任务类型回退：think/plan → claude-code，其他 → generic-shell
+	// 根据任务类型回退：LLM 驱动的任务 → claude-code，纯命令 → generic-shell
 	switch task.TaskType {
-	case "think", "plan", "review", "retro":
+	case "think", "plan", "review", "retro", "build", "bugfix", "qa", "docs", "architecture", "ship":
 		if _, err := s.repos.AgentSpecs.GetByKind("claude-code"); err == nil {
 			return "claude-code"
 		}
@@ -1060,6 +1062,17 @@ func (s *Scheduler) CanAdmit(activeCount int, resourceClass domain.ResourceClass
 // ptrString 返回字符串的指针（用于可选字段）。
 func ptrString(s string) *string {
 	return &s
+}
+
+// extractOutputBeforeMarker 提取标记之前的终端输出内容。
+// 用于将 Agent 执行结果传递给下游任务。
+func extractOutputBeforeMarker(output, marker string) string {
+	idx := strings.Index(output, marker)
+	if idx <= 0 {
+		return ""
+	}
+	// 去除尾部空白，保留有意义的输出
+	return strings.TrimSpace(output[:idx])
 }
 
 // buildPrompt 构建 LLM agent 的 prompt 内容。

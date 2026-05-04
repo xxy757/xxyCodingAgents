@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -108,9 +109,15 @@ func (w *Watchdog) check(ctx context.Context) {
 			continue
 		}
 
-		// 更新心跳时间和最后输出时间
+		// 更新心跳时间
 		w.repos.AgentInstances.UpdateHeartbeat(agent.ID)
-		w.repos.AgentInstances.UpdateLastOutputAt(agent.ID)
+
+		// 仅在有实际输出时更新 last_output_at（避免静默 Agent 的输出超时被掩盖）
+		if agent.TmuxSession != "" {
+			if output, err := w.terminal.CapturePane(ctx, agent.TmuxSession); err == nil && len(strings.TrimSpace(output)) > 0 {
+				w.repos.AgentInstances.UpdateLastOutputAt(agent.ID)
+			}
+		}
 
 		// 检查心跳超时
 		if agent.LastHeartbeatAt != nil {

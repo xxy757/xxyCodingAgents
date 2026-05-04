@@ -1002,10 +1002,32 @@ func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 		finalPrompt = draft.GeneratedPrompt
 	}
 
-	// 生成任务标题
-	title := generateTaskTitle(draft.OriginalInput, finalPrompt)
+	// CAS 先行：原子标记为 sent，防止并发请求重复创建 Run
+	// 使用占位 run_id，创建 Run 后补填真实值
+	placeholderRunID := fmt.Sprintf("pending-%s", draft.ID[:8])
+	rowsAffected, err := s.repos.PromptDrafts.MarkSent(draft.ID, placeholderRunID)
+	if err != nil {
+		slog.Error("cas mark draft as sent", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to mark draft as sent")
+		return
+	}
+	if rowsAffected == 0 {
+		// 并发请求已发送，重新获取并幂等返回
+		updated, _ := s.repos.PromptDrafts.GetByID(draft.ID)
+		if updated != nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"draft_id": updated.ID,
+				"run_id":   updated.RunID,
+				"status":   string(updated.Status),
+			})
+		} else {
+			writeError(w, http.StatusConflict, "draft already sent by concurrent request")
+		}
+		return
+	}
 
-	// 创建 Run 和 Task（不修改 draft 状态）
+	// CAS 成功，创建 Run 和 Task
+	title := generateTaskTitle(draft.OriginalInput, finalPrompt)
 	result, err := s.orch.CreateSimpleRun(
 		r.Context(),
 		draft.ProjectID,
@@ -1015,21 +1037,18 @@ func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 		draft.TaskType,
 	)
 	if err != nil {
-		slog.Error("create simple run from draft", "error", err)
+		// Run 创建失败，回滚 draft 状态
+		slog.Error("create simple run from draft, rolling back", "error", err)
+		if rbErr := s.repos.PromptDrafts.ResetToDraft(draft.ID); rbErr != nil {
+			slog.Error("rollback draft after run creation failure", "error", rbErr)
+		}
 		writeError(w, http.StatusInternalServerError, "failed to create run")
 		return
 	}
 
-	// CAS 更新：只有 status='draft' 时才更新，返回受影响行数
-	rowsAffected, err := s.repos.PromptDrafts.MarkSent(draft.ID, result.Run.ID)
-	if err != nil {
-		slog.Error("mark draft as sent", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to mark draft as sent")
-		return
-	}
-	if rowsAffected == 0 {
-		// 并发请求已发送，幂等返回
-		slog.Warn("draft already sent by concurrent request", "draft_id", draft.ID)
+	// 补填真实的 run_id
+	if err := s.repos.PromptDrafts.UpdateRunID(draft.ID, result.Run.ID); err != nil {
+		slog.Warn("update draft run_id after creation", "error", err)
 	}
 
 	resp := map[string]any{

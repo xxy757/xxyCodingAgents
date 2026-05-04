@@ -216,9 +216,11 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 
 		taskSpec, _ := o.repos.TaskSpecs.GetByID(node.TaskSpecID)
 
-		// 确定任务的资源等级
+		// 确定任务类型和资源等级
+		taskType := node.Label
 		resourceClass := domain.ResourceClassLight
 		if taskSpec != nil {
+			taskType = taskSpec.TaskType
 			resourceClass = taskSpec.ResourceClass
 		}
 
@@ -233,7 +235,7 @@ func (o *Orchestrator) instantiateWorkflow(ctx context.Context, run *domain.Run)
 			ID:            uuid.New().String(),
 			RunID:         run.ID,
 			TaskSpecID:    node.TaskSpecID,
-			TaskType:      node.Label,
+			TaskType:      taskType,
 			AttemptNo:     1,
 			Status:        initialStatus,
 			Priority:      domain.PriorityNormal,
@@ -408,7 +410,13 @@ func (o *Orchestrator) advanceFromNode(ctx context.Context, run *domain.Run, nod
 		}
 
 		if nextNode.Kind == "gate" {
-			// 下游是门禁节点：先检查是否已存在，避免重复创建
+			// 下游是门禁节点：先检查所有前驱是否已完成
+			if !o.allPredecessorsSatisfied(run.ID, nextNode.ID, nodes, edges) {
+				slog.Info("gate still waiting, not all predecessors satisfied", "node_id", nextNode.ID)
+				continue
+			}
+
+			// 检查是否已存在，避免重复创建
 			existingGates, _ := o.repos.Gates.ListByRun(run.ID)
 			alreadyExists := false
 			for _, g := range existingGates {

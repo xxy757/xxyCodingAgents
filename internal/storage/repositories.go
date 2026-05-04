@@ -978,6 +978,24 @@ func (r *PromptDraftRepo) MarkSent(id string, runID string) (int64, error) {
 	return result.RowsAffected()
 }
 
+// ResetToDraft 将已发送的草稿回滚为 draft 状态（用于 CAS 成功但 Run 创建失败时的回滚）。
+func (r *PromptDraftRepo) ResetToDraft(id string) error {
+	_, err := r.db.Exec(
+		"UPDATE prompt_drafts SET status = ?, run_id = '', sent_at = NULL, updated_at = ? WHERE id = ? AND status = ?",
+		domain.PromptDraftStatusDraft, time.Now(), id, domain.PromptDraftStatusSent,
+	)
+	return err
+}
+
+// UpdateRunID 更新已发送草稿的 run_id（用于 CAS 先行策略中 Run 创建后补填）。
+func (r *PromptDraftRepo) UpdateRunID(id string, runID string) error {
+	_, err := r.db.Exec(
+		"UPDATE prompt_drafts SET run_id = ?, updated_at = ? WHERE id = ?",
+		runID, time.Now(), id,
+	)
+	return err
+}
+
 // ==================== GateRepo ====================
 
 // GateRepo 提供质量门禁实体的数据访问操作。
