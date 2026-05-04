@@ -321,6 +321,7 @@ func (s *Scheduler) scheduleTasksLightOnly(ctx context.Context, activeAgentCount
 		return
 	}
 
+	heavyCount := countHeavyAgents(activeAgents)
 	occupiedQAWorkspaces := s.activeBrowseWorkspaces(activeAgents)
 	for _, task := range queuedTasks {
 		// 跳过重型任务
@@ -332,7 +333,7 @@ func (s *Scheduler) scheduleTasksLightOnly(ctx context.Context, activeAgentCount
 			slog.Info("skipping browser qa task due to active workspace session", "task_id", task.ID, "workspace", task.WorkspacePath)
 			continue
 		}
-		if !s.CanAdmit(activeAgentCount, task.ResourceClass) {
+		if !s.CanAdmit(activeAgentCount, heavyCount, task.ResourceClass) {
 			break
 		}
 		if err := s.launchAgent(ctx, task); err != nil {
@@ -434,7 +435,7 @@ func (s *Scheduler) recoverFromCheckpoint(ctx context.Context, taskID string) er
 		return fmt.Errorf("create tmux session for recovery: %w", err)
 	}
 
-	launcherPath, err := s.buildLauncher(ctx, task, agentKind)
+	launcherPath, err := s.buildRecoveryLauncher(ctx, task, agentKind, latest)
 	if err != nil {
 		s.terminal.KillSession(ctx, tmuxSession)
 		s.repos.AgentInstances.UpdateStatus(agentID, domain.AgentStatusFailed)
@@ -529,11 +530,11 @@ func (s *Scheduler) checkTaskCompletion(ctx context.Context, activeAgents []stor
 		}
 
 		// 检测完成标记：[TASK_COMPLETED] 或 [TASK_FAILED]
-		if strings.Contains(output, "[TASK_COMPLETED]") {
+		if containsLineMarker(output, "[TASK_COMPLETED]") {
 			s.repos.AgentInstances.UpdateStatus(entry.Agent.ID, domain.AgentStatusStopped)
 			s.repos.AgentInstances.UpdateLastOutputAt(entry.Agent.ID)
 			// 提取标记之前的输出作为任务结果
-			taskOutput := extractOutputBeforeMarker(output, "[TASK_COMPLETED]")
+			taskOutput := extractLineMarkerContent(output, "[TASK_COMPLETED]")
 			if s.orch != nil {
 				if err := s.orch.CompleteTask(ctx, entry.Task.ID, taskOutput); err != nil {
 					slog.Error("complete task", "task_id", entry.Task.ID, "error", err)
@@ -543,16 +544,27 @@ func (s *Scheduler) checkTaskCompletion(ctx context.Context, activeAgents []stor
 			s.cleanupTaskArtifacts(entry.Task.ID)
 			s.appendSuccessLearning(entry.Task)
 			slog.Info("task completed (detected from output)", "task_id", entry.Task.ID, "agent_id", entry.Agent.ID)
-		} else if strings.Contains(output, "[TASK_FAILED]") {
+		} else if containsLineMarker(output, "[TASK_FAILED]") {
 			s.repos.AgentInstances.UpdateStatus(entry.Agent.ID, domain.AgentStatusFailed)
 			s.repos.AgentInstances.UpdateLastOutputAt(entry.Agent.ID)
 			// 从输出中提取失败原因
 			reason := "task failed (detected from output)"
-			if idx := strings.Index(output, "[TASK_FAILED]"); idx >= 0 {
-				end := strings.Index(output[idx:], "\n")
-				if end > 0 && end < 200 {
-					reason = strings.TrimSpace(output[idx : idx+end])
+			// 找到行首 [TASK_FAILED] 的位置
+			searchIdx := 0
+			for {
+				pos := strings.Index(output[searchIdx:], "[TASK_FAILED]")
+				if pos < 0 {
+					break
 				}
+				absPos := searchIdx + pos
+				if absPos == 0 || output[absPos-1] == '\n' {
+					end := strings.Index(output[absPos:], "\n")
+					if end > 0 && end < 200 {
+						reason = strings.TrimSpace(output[absPos : absPos+end])
+					}
+					break
+				}
+				searchIdx = absPos + len("[TASK_FAILED]")
 			}
 			if s.orch != nil {
 				if err := s.orch.FailTask(ctx, entry.Task.ID, reason); err != nil {
@@ -626,13 +638,14 @@ func (s *Scheduler) scheduleTasks(ctx context.Context, activeAgentCount int, act
 		return
 	}
 
+	heavyCount := countHeavyAgents(activeAgents)
 	occupiedQAWorkspaces := s.activeBrowseWorkspaces(activeAgents)
 	for _, task := range queuedTasks {
 		if s.hasBrowseWorkspaceConflict(task, occupiedQAWorkspaces) {
 			slog.Info("skipping browser qa task due to active workspace session", "task_id", task.ID, "workspace", task.WorkspacePath)
 			continue
 		}
-		if !s.CanAdmit(activeAgentCount, task.ResourceClass) {
+		if !s.CanAdmit(activeAgentCount, heavyCount, task.ResourceClass) {
 			break
 		}
 		if err := s.launchAgent(ctx, task); err != nil {
@@ -640,6 +653,9 @@ func (s *Scheduler) scheduleTasks(ctx context.Context, activeAgentCount int, act
 			continue
 		}
 		activeAgentCount++
+		if task.ResourceClass == domain.ResourceClassHeavy {
+			heavyCount++
+		}
 		if isBrowseTask(task) && task.WorkspacePath != "" {
 			occupiedQAWorkspaces[task.WorkspacePath] = struct{}{}
 		}
@@ -813,6 +829,45 @@ func (s *Scheduler) resolveCommand(task *domain.Task) string {
 		shortID = "unknown"
 	}
 	return "echo 'task " + shortID + " started'"
+}
+
+// buildRecoveryLauncher 构建带检查点上下文的恢复启动器。
+// 将检查点的阶段和状态数据注入到 prompt 中，让 agent 从上次中断处继续。
+func (s *Scheduler) buildRecoveryLauncher(ctx context.Context, task *domain.Task, agentKind string, checkpoint *domain.Checkpoint) (string, error) {
+	env, err := s.buildEnv(ctx, task)
+	if err != nil {
+		return "", err
+	}
+
+	cfg := agentlauncher.Config{
+		TaskID:        task.ID,
+		WorkspacePath: task.WorkspacePath,
+		Env:           env,
+		AgentKind:     agentKind,
+		BaseDir:       s.cfg.AgentRuntime.BaseDir,
+	}
+
+	if agentKind == "claude-code" {
+		// 在 prompt 前注入检查点恢复上下文
+		basePrompt := s.buildPrompt(ctx, task, agentKind)
+		recoveryContext := fmt.Sprintf(
+			"## RESUMING FROM CHECKPOINT\n"+
+				"Phase: %s\n"+
+				"State: %s\n"+
+				"Checkpoint ID: %s\n"+
+				"Continue from where the previous execution was interrupted.\n\n",
+			checkpoint.Phase, checkpoint.StateData, checkpoint.ID,
+		)
+		cfg.PromptContent = recoveryContext + basePrompt
+	} else {
+		cfg.ShellCommand = s.resolveCommand(task)
+		env["CHECKPOINT_ID"] = checkpoint.ID
+		env["CHECKPOINT_PHASE"] = checkpoint.Phase
+		env["CHECKPOINT_STATE"] = checkpoint.StateData
+		cfg.Env = env
+	}
+
+	return agentlauncher.Build(cfg)
 }
 
 func (s *Scheduler) buildLauncher(ctx context.Context, task *domain.Task, agentKind string) (string, error) {
@@ -1045,18 +1100,49 @@ func (s *Scheduler) determinePressure(memPercent, diskPercent float64) PressureL
 }
 
 // CanAdmit 判断是否可以接纳新任务，考虑并发限制和资源等级。
-func (s *Scheduler) CanAdmit(activeCount int, resourceClass domain.ResourceClass) bool {
+func (s *Scheduler) CanAdmit(activeCount int, heavyCount int, resourceClass domain.ResourceClass) bool {
 	cfg := s.cfg.Scheduler
 
 	if activeCount >= cfg.MaxConcurrentAgents {
 		return false
 	}
 
-	if resourceClass == domain.ResourceClassHeavy && activeCount >= cfg.MaxHeavyAgents {
+	if resourceClass == domain.ResourceClassHeavy && heavyCount >= cfg.MaxHeavyAgents {
 		return false
 	}
 
 	return true
+}
+
+// transitionAgentStatus 统一更新 Agent 和关联 Task 的状态，并记录事件。
+// taskStatus 为空串时跳过 Task 状态更新。eventType 为空串时跳过事件记录。
+func (s *Scheduler) transitionAgentStatus(agent *domain.AgentInstance, task *domain.Task, agentStatus domain.AgentInstanceStatus, taskStatus domain.TaskStatus, eventType domain.EventType, message string) {
+	s.repos.AgentInstances.UpdateStatus(agent.ID, agentStatus)
+	if taskStatus != "" && task != nil {
+		s.repos.Tasks.UpdateStatus(task.ID, taskStatus)
+	}
+	if eventType != "" {
+		s.repos.Events.Create(&domain.Event{
+			ID:        uuid.New().String(),
+			RunID:     agent.RunID,
+			TaskID:    ptrString(agent.TaskID),
+			AgentID:   ptrString(agent.ID),
+			EventType: eventType,
+			Message:   message,
+			CreatedAt: time.Now(),
+		})
+	}
+}
+
+// countHeavyAgents 统计活跃 Agent 中资源等级为 heavy 的数量。
+func countHeavyAgents(activeAgents []storage.ActiveAgentsResult) int {
+	count := 0
+	for _, entry := range activeAgents {
+		if entry.Task != nil && entry.Task.ResourceClass == domain.ResourceClassHeavy {
+			count++
+		}
+	}
+	return count
 }
 
 // ptrString 返回字符串的指针（用于可选字段）。
@@ -1073,6 +1159,42 @@ func extractOutputBeforeMarker(output, marker string) string {
 	}
 	// 去除尾部空白，保留有意义的输出
 	return strings.TrimSpace(output[:idx])
+}
+
+// containsLineMarker 检查输出中是否包含行首标记。
+// 标记必须出现在行首（字符串开头或紧跟换行符），避免误匹配 agent 讨论代码时的引用。
+func containsLineMarker(output, marker string) bool {
+	idx := 0
+	for {
+		pos := strings.Index(output[idx:], marker)
+		if pos < 0 {
+			return false
+		}
+		absPos := idx + pos
+		if absPos == 0 || output[absPos-1] == '\n' {
+			return true
+		}
+		idx = absPos + len(marker)
+	}
+}
+
+// extractLineMarkerContent 提取行首标记之前的终端输出内容。
+func extractLineMarkerContent(output, marker string) string {
+	idx := 0
+	for {
+		pos := strings.Index(output[idx:], marker)
+		if pos < 0 {
+			return ""
+		}
+		absPos := idx + pos
+		if absPos == 0 || output[absPos-1] == '\n' {
+			if absPos == 0 {
+				return ""
+			}
+			return strings.TrimSpace(output[:absPos])
+		}
+		idx = absPos + len(marker)
+	}
 }
 
 // buildPrompt 构建 LLM agent 的 prompt 内容。

@@ -48,7 +48,8 @@ func (o *Orchestrator) CreateRun(ctx context.Context, projectID, templateID, tit
 	// 如果关联了工作流模板，实例化模板中的所有任务
 	if templateID != "" {
 		if err := o.instantiateWorkflow(ctx, run); err != nil {
-			slog.Error("instantiate workflow", "run_id", run.ID, "error", err)
+			o.repos.Runs.UpdateStatus(run.ID, domain.RunStatusFailed)
+			return nil, fmt.Errorf("instantiate workflow: %w", err)
 		}
 	}
 
@@ -313,6 +314,7 @@ func (o *Orchestrator) FailTask(ctx context.Context, taskID, reason string) erro
 	o.emitEvent(ctx, task.RunID, &taskID, nil, domain.EventTypeTaskFailed, reason)
 
 	// 检查工作流模板的失败策略
+	aborted := false
 	if task.RunID != "" {
 		run, _ := o.repos.Runs.GetByID(task.RunID)
 		if run != nil && run.WorkflowTemplateID != "" {
@@ -320,8 +322,21 @@ func (o *Orchestrator) FailTask(ctx context.Context, taskID, reason string) erro
 			if template != nil && template.OnFailure == "abort" {
 				o.repos.Runs.UpdateStatus(run.ID, domain.RunStatusFailed)
 				o.emitEvent(ctx, run.ID, nil, nil, domain.EventTypeTaskFailed, "run aborted due to task failure")
+				aborted = true
 			}
 		}
+	}
+
+	// 推进工作流：失败的任务也需要触发下游，让 blocked 任务根据策略变为 cancelled 或继续
+	if !aborted {
+		if err := o.advanceFromTask(ctx, task); err != nil {
+			slog.Error("advance workflow from failed task", "task_id", taskID, "error", err)
+		}
+	}
+
+	// 检查运行是否已全部结束
+	if err := o.checkRunCompletion(ctx, task.RunID); err != nil {
+		slog.Error("check run completion after failure", "run_id", task.RunID, "error", err)
 	}
 
 	return nil
@@ -454,7 +469,7 @@ func (o *Orchestrator) advanceFromNode(ctx context.Context, run *domain.Run, nod
 
 			// auto 类型立即评估
 			if gate.GateType == domain.GateTypeAuto {
-				go o.EvaluateGate(context.Background(), gate.ID)
+				go o.EvaluateGate(ctx, gate.ID)
 			}
 		} else {
 			// 下游是任务节点：需要所有前驱节点都已完成才能解除 blocked
@@ -770,7 +785,19 @@ func (o *Orchestrator) checkRunCompletion(ctx context.Context, runID string) err
 	// 所有任务和门禁都已结束，更新运行最终状态
 	finalStatus := domain.RunStatusCompleted
 	if hasFailed {
-		finalStatus = domain.RunStatusFailed
+		// 检查工作流模板的失败策略：continue 策略下不因任务失败而中止整个运行
+		run, _ := o.repos.Runs.GetByID(runID)
+		if run != nil && run.WorkflowTemplateID != "" {
+			template, _ := o.repos.WorkflowTemplates.GetByID(run.WorkflowTemplateID)
+			if template != nil && template.OnFailure == "continue" {
+				// continue 策略：任务失败但运行仍然完成
+				slog.Info("run completed with failures (continue policy)", "run_id", runID)
+			} else {
+				finalStatus = domain.RunStatusFailed
+			}
+		} else {
+			finalStatus = domain.RunStatusFailed
+		}
 	}
 	if err := o.repos.Runs.UpdateStatus(runID, finalStatus); err != nil {
 		return err

@@ -50,46 +50,63 @@ func newTestScheduler() *Scheduler {
 
 func TestCanAdmit_UnderLimit(t *testing.T) {
 	s := newTestScheduler()
-	if !s.CanAdmit(0, domain.ResourceClassLight) {
+	if !s.CanAdmit(0, 0, domain.ResourceClassLight) {
 		t.Error("expected to admit with 0 active agents")
 	}
-	if !s.CanAdmit(1, domain.ResourceClassLight) {
+	if !s.CanAdmit(1, 0, domain.ResourceClassLight) {
 		t.Error("expected to admit with 1 active agent")
 	}
 }
 
 func TestCanAdmit_AtLimit(t *testing.T) {
 	s := newTestScheduler()
-	if s.CanAdmit(2, domain.ResourceClassLight) {
+	if s.CanAdmit(2, 0, domain.ResourceClassLight) {
 		t.Error("expected to reject at MaxConcurrentAgents=2")
 	}
 }
 
 func TestCanAdmit_OverLimit(t *testing.T) {
 	s := newTestScheduler()
-	if s.CanAdmit(5, domain.ResourceClassLight) {
+	if s.CanAdmit(5, 0, domain.ResourceClassLight) {
 		t.Error("expected to reject over MaxConcurrentAgents")
 	}
 }
 
 func TestCanAdmit_HeavyUnderHeavyLimit(t *testing.T) {
 	s := newTestScheduler()
-	if !s.CanAdmit(0, domain.ResourceClassHeavy) {
+	if !s.CanAdmit(0, 0, domain.ResourceClassHeavy) {
 		t.Error("expected to admit heavy task with 0 active agents")
 	}
 }
 
 func TestCanAdmit_HeavyAtHeavyLimit(t *testing.T) {
 	s := newTestScheduler()
-	if s.CanAdmit(1, domain.ResourceClassHeavy) {
+	if s.CanAdmit(0, 1, domain.ResourceClassHeavy) {
 		t.Error("expected to reject heavy task at MaxHeavyAgents=1")
 	}
 }
 
 func TestCanAdmit_LightAtHeavyLimit(t *testing.T) {
 	s := newTestScheduler()
-	if !s.CanAdmit(1, domain.ResourceClassLight) {
+	if !s.CanAdmit(1, 1, domain.ResourceClassLight) {
 		t.Error("expected light task to be admitted even at MaxHeavyAgents")
+	}
+}
+
+func TestCanAdmit_HeavyCountSeparate(t *testing.T) {
+	s := newTestScheduler()
+	// MaxHeavyAgents=1, heavyCount=1 should be at limit
+	if s.CanAdmit(1, 1, domain.ResourceClassHeavy) {
+		t.Error("expected to reject heavy when heavyCount=1 >= MaxHeavyAgents=1")
+	}
+	// Light agent shouldn't affect heavy admission
+	if !s.CanAdmit(1, 0, domain.ResourceClassHeavy) {
+		t.Error("expected to admit heavy when heavyCount=0 < MaxHeavyAgents=1")
+	}
+	// Key test: 1 active light agent, 0 heavy — should admit heavy
+	// This would have failed with the old code (activeCount=1 >= MaxHeavyAgents=1)
+	if !s.CanAdmit(1, 0, domain.ResourceClassHeavy) {
+		t.Error("expected to admit heavy when heavyCount=0 even with activeCount=1")
 	}
 }
 

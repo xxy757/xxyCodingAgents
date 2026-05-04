@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -51,6 +52,8 @@ type BuildOptions struct {
 type Engine struct {
 	templateDir string
 	templates   map[string]PhaseTemplate
+	loadOnce    sync.Once
+	loadErr     error
 }
 
 // NewEngine 创建模板引擎。
@@ -107,10 +110,10 @@ func (e *Engine) BuildPrompt(opts BuildOptions) (string, error) {
 }
 
 func (e *Engine) ensureLoaded() error {
-	if len(e.templates) > 0 {
-		return nil
-	}
-	return e.Load()
+	e.loadOnce.Do(func() {
+		e.loadErr = e.Load()
+	})
+	return e.loadErr
 }
 
 // Load 从模板目录加载所有 YAML 模板。

@@ -1038,9 +1038,11 @@ func (s *Server) handleSendPromptDraft(w http.ResponseWriter, r *http.Request) {
 	)
 	if err != nil {
 		// Run 创建失败，回滚 draft 状态
-		slog.Error("create simple run from draft, rolling back", "error", err)
+		slog.Error("create simple run from draft, rolling back", "error", err, "draft_id", draft.ID)
 		if rbErr := s.repos.PromptDrafts.ResetToDraft(draft.ID); rbErr != nil {
-			slog.Error("rollback draft after run creation failure", "error", rbErr)
+			// 回滚失败是严重错误：draft 卡在 sent 状态且 run_id 是占位符
+			slog.Error("CRITICAL: rollback draft failed, draft stuck in sent state with placeholder run_id",
+				"error", rbErr, "draft_id", draft.ID, "placeholder_run_id", placeholderRunID)
 		}
 		writeError(w, http.StatusInternalServerError, "failed to create run")
 		return
