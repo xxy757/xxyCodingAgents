@@ -1,140 +1,146 @@
-// agents/page.tsx - Agent 管理
-// 卡片网格展示 Agent 实例，支持暂停、恢复和停止操作。
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { apiFetch, type AgentInstance } from "@/lib/api";
-import { StatusBadge } from "@/components/StatusBadge";
-import {
-  Robot,
-  Pause,
-  Play,
-  Stop,
-  Terminal,
-} from "@phosphor-icons/react/dist/ssr";
+import { RobotOutlined, PauseCircleOutlined, PlayCircleOutlined, StopOutlined } from '@ant-design/icons';
+import { Table, Tag, Button, Space, Typography, Card, Popconfirm, Alert } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { useAgents, useAgentAction } from '@/lib/hooks/useAgents';
+import type { AgentInstance } from '@/lib/types';
+import { formatDate, shortId } from '@/lib/utils';
 
-export default function AgentsPage() {
-  const [agents, setAgents] = useState<AgentInstance[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const { Title, Text } = Typography;
 
-  useEffect(() => {
-    apiFetch<AgentInstance[]>("/api/agents")
-      .then(setAgents)
-      .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const handleAction = async (id: string, action: string) => {
-    try {
-      setError(null);
-      await apiFetch(`/api/agents/${id}/${action}`, { method: "POST" });
-      const updated = await apiFetch<AgentInstance[]>("/api/agents");
-      setAgents(updated);
-    } catch (e: any) {
-      setError(e.message);
-    }
+function statusTag(status: string) {
+  const map: Record<string, string> = {
+    running: 'processing', active: 'success', completed: 'success',
+    failed: 'error', stopped: 'error', pending: 'default', queued: 'default',
+    cancelled: 'warning', paused: 'orange', draft: 'blue', sent: 'green',
+    evicted: 'volcano', starting: 'processing', detached: 'default', closed: 'default',
+    recoverable: 'orange', orphaned: 'magenta', admitted: 'processing', blocked: 'default',
   };
-
-  return (
-    <div className="space-y-6 animate-fade-up">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">Agent</h1>
-        <p className="text-sm text-zinc-500 mt-1">管理和监控 Agent 实例</p>
-      </div>
-
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-sm">{error}</div>
-      )}
-
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="card-bezel p-5">
-              <div className="skeleton h-4 w-24 mb-3" />
-              <div className="skeleton h-3 w-full mb-2" />
-              <div className="skeleton h-3 w-2/3" />
-            </div>
-          ))}
-        </div>
-      ) : agents.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger">
-          {agents.map((agent) => (
-            <div key={agent.id} className="card-bezel p-5">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center">
-                    <Robot className="w-4 h-4 text-zinc-500" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-zinc-900 font-mono">{agent.id.slice(0, 8)}</h3>
-                    <p className="text-xs text-zinc-400">{agent.agent_kind}</p>
-                  </div>
-                </div>
-                <StatusBadge status={agent.status} />
-              </div>
-
-              {agent.tmux_session && (
-                <div className="flex items-center gap-2 text-xs text-zinc-500 mb-4 px-3 py-2 bg-zinc-50 rounded-lg">
-                  <Terminal className="w-3 h-3" />
-                  <span className="font-mono">{agent.tmux_session}</span>
-                </div>
-              )}
-
-              <div className="flex items-center gap-4 text-xs text-zinc-400 mb-4">
-                <span>创建: {new Date(agent.created_at).toLocaleString("zh-CN")}</span>
-              </div>
-
-              <div className="flex gap-2">
-                {agent.status === "running" && (
-                  <button
-                    onClick={() => handleAction(agent.id, "pause")}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-amber-50 text-amber-700
-                               border border-amber-200/60 rounded-lg hover:bg-amber-100 pressable transition-colors"
-                  >
-                    <Pause className="w-3 h-3" />
-                    暂停
-                  </button>
-                )}
-                {agent.status === "paused" && (
-                  <button
-                    onClick={() => handleAction(agent.id, "resume")}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-accent-50 text-accent-700
-                               border border-accent-200/60 rounded-lg hover:bg-accent-100 pressable transition-colors"
-                  >
-                    <Play className="w-3 h-3" />
-                    恢复
-                  </button>
-                )}
-                {agent.status !== "stopped" && agent.status !== "failed" && (
-                  <button
-                    onClick={() => handleAction(agent.id, "stop")}
-                    className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium bg-red-50 text-red-700
-                               border border-red-200/60 rounded-lg hover:bg-red-100 pressable transition-colors"
-                  >
-                    <Stop className="w-3 h-3" />
-                    停止
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
+  return <Tag color={map[status] || 'default'}>{status}</Tag>;
 }
 
-function EmptyState() {
+export default function AgentsPage() {
+  const { data: agents, isLoading, error } = useAgents();
+  const actionMutation = useAgentAction();
+
+  const handleAction = (id: string, action: 'pause' | 'resume' | 'stop') => {
+    actionMutation.mutate({ id, action });
+  };
+
+  const columns: ColumnsType<AgentInstance> = [
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 160,
+      render: (id: string) => (
+        <Space>
+          <div style={{
+            width: 28, height: 28, borderRadius: 6,
+            background: '#e6f4ff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <RobotOutlined style={{ color: '#1677ff', fontSize: 12 }} />
+          </div>
+          <Text code style={{ fontSize: 12 }}>{shortId(id)}</Text>
+        </Space>
+      ),
+    },
+    {
+      title: '类型',
+      dataIndex: 'agent_kind',
+      key: 'agent_kind',
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      render: (status: string) => statusTag(status),
+    },
+    {
+      title: 'tmux 会话',
+      dataIndex: 'tmux_session',
+      key: 'tmux_session',
+      render: (val: string) => <Text code style={{ fontSize: 12 }}>{val || '-'}</Text>,
+    },
+    {
+      title: '创建时间',
+      dataIndex: 'created_at',
+      key: 'created_at',
+      width: 180,
+      render: (val: string) => <Text type="secondary" style={{ fontSize: 12 }}>{formatDate(val)}</Text>,
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 240,
+      render: (_: unknown, record: AgentInstance) => (
+        <Space size={4}>
+          {record.status === 'running' && (
+            <Button
+              size="small"
+              icon={<PauseCircleOutlined />}
+              onClick={() => handleAction(record.id, 'pause')}
+            >
+              暂停
+            </Button>
+          )}
+          {record.status === 'paused' && (
+            <Button
+              size="small"
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              onClick={() => handleAction(record.id, 'resume')}
+            >
+              恢复
+            </Button>
+          )}
+          {record.status !== 'stopped' && record.status !== 'failed' && (
+            <Popconfirm
+              title="确认停止"
+              description="确定要停止此 Agent 实例吗？"
+              onConfirm={() => handleAction(record.id, 'stop')}
+              okText="确定"
+              cancelText="取消"
+            >
+              <Button size="small" danger icon={<StopOutlined />}>停止</Button>
+            </Popconfirm>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  const errorMsg = error?.message || actionMutation.error?.message;
+
   return (
-    <div className="card-bezel p-12 text-center">
-      <div className="w-12 h-12 rounded-2xl bg-zinc-100 flex items-center justify-center mx-auto mb-4">
-        <Robot className="w-6 h-6 text-zinc-400" />
+    <div>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>Agent 实例</Title>
+        <Text type="secondary">管理和监控 Agent 实例</Text>
       </div>
-      <p className="text-sm font-medium text-zinc-600">暂无 Agent 实例</p>
-      <p className="text-xs text-zinc-400 mt-1">Agent 会在任务调度时自动创建</p>
+
+      {errorMsg && (
+        <Alert
+          type="error"
+          message={errorMsg}
+          showIcon
+          closable
+          style={{ marginBottom: 16 }}
+        />
+      )}
+
+      <Card styles={{ body: { padding: 0 } }}>
+        <Table<AgentInstance>
+          columns={columns}
+          dataSource={agents || []}
+          loading={isLoading}
+          rowKey="id"
+          locale={{ emptyText: '暂无 Agent 实例，Agent 会在任务调度时自动创建' }}
+          pagination={false}
+        />
+      </Card>
     </div>
   );
 }

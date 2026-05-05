@@ -1,256 +1,357 @@
-// page.tsx - 系统仪表盘
-// Bento 布局：资源指标 + 压力状态 + 服务健康 + 快速入口。
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { apiFetch, type ResourceSnapshot } from "@/lib/api";
-import { StatusBadge } from "@/components/StatusBadge";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
-  Cpu,
-  HardDrive,
-  Memory,
-  Gauge,
-  ActivityIcon as Activity,
-  Lightning,
-  ArrowRight,
-  Pulse,
-} from "@phosphor-icons/react/dist/ssr";
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Progress,
+  Tag,
+  Button,
+  Input,
+  Space,
+  Typography,
+} from 'antd';
+import {
+  RobotOutlined,
+  DashboardOutlined,
+  ThunderboltOutlined,
+  ArrowRightOutlined,
+  ApiOutlined,
+  DatabaseOutlined,
+  CheckCircleOutlined,
+  CloseCircleOutlined,
+} from '@ant-design/icons';
+import { useSystemMetrics, useHealth, useReady } from '@/lib/hooks/useSystem';
 
-interface HealthStatus {
-  status: string;
-}
+const { Title, Text, Paragraph } = Typography;
 
 const QUICK_TASKS = [
-  { type: "bugfix", label: "修复 Bug" },
-  { type: "build", label: "创建 API" },
-  { type: "qa", label: "添加测试" },
-  { type: "review", label: "代码审查" },
-  { type: "docs", label: "写文档" },
+  { type: 'bugfix', label: '修复 Bug', icon: '🐛' },
+  { type: 'build', label: '创建 API', icon: '⚡' },
+  { type: 'qa', label: '添加测试', icon: '✅' },
+  { type: 'review', label: '代码审查', icon: '🔍' },
+  { type: 'docs', label: '写文档', icon: '📝' },
 ];
+
+const PRESSURE_MAP: Record<string, { label: string; color: 'success' | 'warning' | 'error'; percent: number; desc: string }> = {
+  normal: { label: '正常', color: 'success', percent: 30, desc: '系统资源充足，可正常调度任务' },
+  warn: { label: '警告', color: 'warning', percent: 60, desc: '资源使用偏高，建议关注' },
+  high: { label: '高压', color: 'warning', percent: 85, desc: '资源紧张，低优先级任务可能被暂停' },
+  critical: { label: '危险', color: 'error', percent: 100, desc: '资源严重不足，可抢占任务将被驱逐' },
+};
+
+function getMemColor(val?: number): 'blue' | 'gold' | 'red' {
+  if (val === undefined) return 'blue';
+  if (val > 80) return 'red';
+  if (val > 60) return 'gold';
+  return 'blue';
+}
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [metrics, setMetrics] = useState<ResourceSnapshot | null>(null);
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [ready, setReady] = useState<HealthStatus | null>(null);
-  const [quickInput, setQuickInput] = useState("");
-
-  useEffect(() => {
-    const fetch_ = async () => {
-      const [m, h, r] = await Promise.allSettled([
-        apiFetch<ResourceSnapshot>("/api/system/metrics"),
-        apiFetch<HealthStatus>("/healthz"),
-        apiFetch<HealthStatus>("/readyz"),
-      ]);
-      if (m.status === "fulfilled") setMetrics(m.value);
-      if (h.status === "fulfilled") setHealth(h.value);
-      if (r.status === "fulfilled") setReady(r.value);
-    };
-    fetch_();
-    const t = setInterval(fetch_, 5000);
-    return () => clearInterval(t);
-  }, []);
+  const { data: metrics } = useSystemMetrics(5000);
+  const { data: health } = useHealth();
+  const { data: ready } = useReady();
+  const [quickInput, setQuickInput] = useState('');
 
   const handleSubmit = (type?: string) => {
     const p = new URLSearchParams();
-    if (quickInput.trim()) p.set("input", quickInput.trim());
-    if (type) p.set("type", type);
+    if (quickInput.trim()) p.set('input', quickInput.trim());
+    if (type) p.set('type', type);
     router.push(`/prompt-drafts?${p.toString()}`);
   };
 
+  const pressureKey = metrics?.pressure_level || 'normal';
+  const pressure = PRESSURE_MAP[pressureKey] || PRESSURE_MAP.normal;
+
+  const apiHealthy = health?.status === 'ok';
+  const dbReady = ready?.status === 'ready';
+
   return (
-    <div className="space-y-8 animate-fade-up">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900">
+    <div style={{ padding: 0 }}>
+      {/* 页面标题 */}
+      <div style={{ marginBottom: 24 }}>
+        <Title level={4} style={{ margin: 0 }}>
           仪表盘
-        </h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          系统资源与服务状态概览
-        </p>
+        </Title>
+        <Text type="secondary">系统资源与服务状态概览</Text>
       </div>
 
-      {/* Quick Input */}
-      <div className="card-bezel p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <Lightning weight="fill" className="w-4 h-4 text-accent-600" />
-          <span className="text-sm font-medium text-zinc-700">快速任务</span>
+      {/* 快速任务输入区 */}
+      <Card
+        style={{
+          marginBottom: 24,
+          background: 'linear-gradient(135deg, #f0f5ff 0%, #e6f4ff 50%, #f0f5ff 100%)',
+          borderColor: '#d6e4ff',
+        }}
+        styles={{ body: { padding: '20px 24px' } }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: '#1677ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#fff',
+              boxShadow: '0 2px 8px rgba(22,119,255,0.35)',
+            }}
+          >
+            <ThunderboltOutlined style={{ fontSize: 15 }} />
+          </div>
+          <div>
+            <Text strong style={{ fontSize: 14 }}>
+              快速任务
+            </Text>
+            <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+              输入一句话，AI 帮你拆解执行
+            </Text>
+          </div>
         </div>
-        <div className="flex gap-3">
-          <input
-            type="text"
+        <Space.Compact style={{ width: '100%' }}>
+          <Input
+            size="large"
             value={quickInput}
             onChange={(e) => setQuickInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
-            placeholder="描述你想完成的任务..."
-            className="flex-1 bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm
-                       placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-accent-500/20
-                       focus:border-accent-500 transition-all duration-200"
+            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+            placeholder="描述你想完成的任务，例如：给 user 表添加 email 唯一索引..."
+            style={{ flex: 1 }}
           />
-          <button
+          <Button
+            type="primary"
+            size="large"
+            icon={<ArrowRightOutlined />}
             onClick={() => handleSubmit()}
-            className="px-5 py-3 bg-zinc-900 text-white rounded-xl text-sm font-medium
-                       hover:bg-zinc-800 pressable transition-colors duration-200
-                       flex items-center gap-2"
           >
             优化提示词
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="mt-3 flex gap-2 flex-wrap">
+          </Button>
+        </Space.Compact>
+        <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {QUICK_TASKS.map((t) => (
-            <button
+            <Button
               key={t.type}
+              size="small"
               onClick={() => handleSubmit(t.type)}
-              className="px-3.5 py-1.5 text-xs font-medium bg-zinc-100 text-zinc-600
-                         rounded-full hover:bg-zinc-200 hover:text-zinc-800
-                         transition-colors duration-200 pressable border border-zinc-200/60"
             >
-              {t.label}
-            </button>
+              {t.icon} {t.label}
+            </Button>
           ))}
         </div>
-      </div>
+      </Card>
 
-      {/* Metrics Bento Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 stagger">
-        <MetricCard
-          icon={Activity}
-          label="活跃 Agent"
-          value={metrics?.active_agents ?? 0}
-          unit="个"
-          loading={!metrics}
-        />
-        <MetricCard
-          icon={Memory}
-          label="内存使用"
-          value={metrics?.memory_percent ?? 0}
-          unit="%"
-          loading={!metrics}
-          bar={metrics?.memory_percent}
-        />
-        <MetricCard
-          icon={Cpu}
-          label="CPU 使用"
-          value={metrics?.cpu_percent ?? 0}
-          unit="%"
-          loading={!metrics}
-          bar={metrics?.cpu_percent}
-        />
-        <MetricCard
-          icon={HardDrive}
-          label="磁盘使用"
-          value={metrics?.disk_percent ?? 0}
-          unit="%"
-          loading={!metrics}
-          bar={metrics?.disk_percent}
-        />
-      </div>
-
-      {/* Bottom Row: Pressure + Services */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Pressure */}
-        <div className="card-bezel p-6">
-          <div className="flex items-center gap-2 mb-4">
-            <Gauge className="w-4 h-4 text-zinc-500" />
-            <span className="text-sm font-medium text-zinc-700">压力等级</span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className={`text-3xl font-semibold tracking-tight ${
-              metrics?.pressure_level === "normal" ? "text-emerald-600" :
-              metrics?.pressure_level === "warn" ? "text-amber-600" : "text-red-600"
-            }`}>
-              {(metrics?.pressure_level ?? "normal").toUpperCase()}
-            </span>
-          </div>
-          <div className="mt-3 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-                metrics?.pressure_level === "normal" ? "bg-emerald-500" :
-                metrics?.pressure_level === "warn" ? "bg-amber-500" : "bg-red-500"
-              }`}
-              style={{ width: `${Math.min((metrics?.memory_percent ?? 0), 100)}%` }}
+      {/* 4 个指标卡片 */}
+      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card styles={{ body: { padding: '20px 24px' } }}>
+            <Statistic
+              title="活跃 Agent"
+              value={metrics?.active_agents ?? 0}
+              prefix={<RobotOutlined style={{ color: '#1677ff' }} />}
+              valueStyle={{ color: '#1677ff' }}
             />
-          </div>
-        </div>
-
-        {/* Services */}
-        <div className="card-bezel p-6 lg:col-span-2">
-          <div className="flex items-center gap-2 mb-4">
-            <Pulse className="w-4 h-4 text-zinc-500" />
-            <span className="text-sm font-medium text-zinc-700">服务状态</span>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <ServiceItem
-              label="后端 API"
-              status={health?.status === "ok" ? "running" : "unknown"}
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              正在运行的 Agent 实例
+            </Text>
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card styles={{ body: { padding: '20px 24px' } }}>
+            <Statistic
+              title="内存使用"
+              value={metrics?.memory_percent ?? 0}
+              precision={1}
+              suffix="%"
+              prefix={<DashboardOutlined />}
+              valueStyle={{ color: getMemColor(metrics?.memory_percent) === 'red' ? '#ff4d4f' : getMemColor(metrics?.memory_percent) === 'gold' ? '#d48806' : '#1677ff' }}
             />
-            <ServiceItem
-              label="数据库"
-              status={ready?.status === "ready" ? "running" : "unknown"}
+            <Progress
+              percent={metrics?.memory_percent ?? 0}
+              showInfo={false}
+              strokeColor={getMemColor(metrics?.memory_percent) === 'red' ? '#ff4d4f' : getMemColor(metrics?.memory_percent) === 'gold' ? '#faad14' : '#1677ff'}
+              size="small"
+              style={{ marginTop: 8 }}
             />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card styles={{ body: { padding: '20px 24px' } }}>
+            <Statistic
+              title="CPU 使用"
+              value={metrics?.cpu_percent ?? 0}
+              precision={1}
+              suffix="%"
+              prefix={<DashboardOutlined />}
+              valueStyle={{ color: getMemColor(metrics?.cpu_percent) === 'red' ? '#ff4d4f' : getMemColor(metrics?.cpu_percent) === 'gold' ? '#d48806' : '#1677ff' }}
+            />
+            <Progress
+              percent={metrics?.cpu_percent ?? 0}
+              showInfo={false}
+              strokeColor={getMemColor(metrics?.cpu_percent) === 'red' ? '#ff4d4f' : getMemColor(metrics?.cpu_percent) === 'gold' ? '#faad14' : '#1677ff'}
+              size="small"
+              style={{ marginTop: 8 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={12} lg={6}>
+          <Card styles={{ body: { padding: '20px 24px' } }}>
+            <Statistic
+              title="磁盘使用"
+              value={metrics?.disk_percent ?? 0}
+              precision={1}
+              suffix="%"
+              prefix={<DashboardOutlined />}
+              valueStyle={{ color: getMemColor(metrics?.disk_percent) === 'red' ? '#ff4d4f' : getMemColor(metrics?.disk_percent) === 'gold' ? '#d48806' : '#1677ff' }}
+            />
+            <Progress
+              percent={metrics?.disk_percent ?? 0}
+              showInfo={false}
+              strokeColor={getMemColor(metrics?.disk_percent) === 'red' ? '#ff4d4f' : getMemColor(metrics?.disk_percent) === 'gold' ? '#faad14' : '#1677ff'}
+              size="small"
+              style={{ marginTop: 8 }}
+            />
+          </Card>
+        </Col>
+      </Row>
 
-function MetricCard({
-  icon: Icon,
-  label,
-  value,
-  unit,
-  loading,
-  bar,
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: number;
-  unit: string;
-  loading: boolean;
-  bar?: number;
-}) {
-  return (
-    <div className="card-bezel p-5">
-      {loading ? (
-        <>
-          <div className="skeleton h-3 w-16 mb-3" />
-          <div className="skeleton h-7 w-20 mb-2" />
-          <div className="skeleton h-1 w-full" />
-        </>
-      ) : (
-        <>
-          <div className="flex items-center gap-2 mb-2">
-            <Icon className="w-3.5 h-3.5 text-zinc-400" />
-            <span className="text-xs text-zinc-500 font-medium">{label}</span>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-2xl font-semibold tracking-tight text-zinc-900">
-              {typeof value === "number" ? value.toFixed(bar !== undefined ? 1 : 0) : value}
-            </span>
-            <span className="text-sm text-zinc-400">{unit}</span>
-          </div>
-          {bar !== undefined && (
-            <div className="mt-3 h-1 rounded-full bg-zinc-100 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-accent-500 transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]"
-                style={{ width: `${Math.min(bar, 100)}%` }}
+      {/* 底部：压力等级 + 服务状态 */}
+      <Row gutter={[16, 16]}>
+        <Col xs={24} lg={8}>
+          <Card
+            title={
+              <Space>
+                <DashboardOutlined />
+                <span>系统压力</span>
+              </Space>
+            }
+            styles={{ body: { padding: '16px 24px' } }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+              <Progress
+                type="dashboard"
+                percent={Math.min(metrics?.memory_percent ?? 0, 100)}
+                strokeColor={{
+                  '0%': pressure.color === 'success' ? '#52c41a' : pressure.color === 'warning' ? '#faad14' : '#ff4d4f',
+                  '100%': pressure.color === 'success' ? '#73d13d' : pressure.color === 'warning' ? '#ffc53d' : '#ff7875',
+                }}
+                format={() => (
+                  <span
+                    style={{
+                      fontSize: 20,
+                      fontWeight: 700,
+                      color: pressure.color === 'success' ? '#52c41a' : pressure.color === 'warning' ? '#d48806' : '#ff4d4f',
+                    }}
+                  >
+                    {pressure.label}
+                  </span>
+                )}
+                size={120}
               />
             </div>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function ServiceItem({ label, status }: { label: string; status: string }) {
-  return (
-    <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-zinc-50 border border-zinc-100">
-      <span className="text-sm text-zinc-700">{label}</span>
-      <StatusBadge status={status} />
+            <Paragraph
+              type="secondary"
+              style={{ textAlign: 'center', fontSize: 12, marginBottom: 0 }}
+            >
+              {pressure.desc}
+            </Paragraph>
+          </Card>
+        </Col>
+        <Col xs={24} lg={16}>
+          <Card
+            title={
+              <Space>
+                <ApiOutlined />
+                <span>服务状态</span>
+              </Space>
+            }
+            styles={{ body: { padding: '16px 24px' } }}
+          >
+            <Row gutter={[16, 16]}>
+              <Col xs={24} sm={12}>
+                <Card
+                  size="small"
+                  style={{ background: '#fafafa', borderColor: apiHealthy ? '#b7eb8f' : '#ffa39e' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Space>
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 8,
+                          background: '#e6f4ff',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#1677ff',
+                        }}
+                      >
+                        <ApiOutlined style={{ fontSize: 16 }} />
+                      </div>
+                      <div>
+                        <Text strong>后端 API</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          localhost:8080
+                        </Text>
+                      </div>
+                    </Space>
+                    <Tag
+                      icon={apiHealthy ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                      color={apiHealthy ? 'success' : 'error'}
+                    >
+                      {apiHealthy ? '正常' : '异常'}
+                    </Tag>
+                  </div>
+                </Card>
+              </Col>
+              <Col xs={24} sm={12}>
+                <Card
+                  size="small"
+                  style={{ background: '#fafafa', borderColor: dbReady ? '#b7eb8f' : '#ffa39e' }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Space>
+                      <div
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 8,
+                          background: '#f6ffed',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#52c41a',
+                        }}
+                      >
+                        <DatabaseOutlined style={{ fontSize: 16 }} />
+                      </div>
+                      <div>
+                        <Text strong>数据库</Text>
+                        <br />
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          SQLite WAL
+                        </Text>
+                      </div>
+                    </Space>
+                    <Tag
+                      icon={dbReady ? <CheckCircleOutlined /> : <CloseCircleOutlined />}
+                      color={dbReady ? 'success' : 'error'}
+                    >
+                      {dbReady ? '就绪' : '异常'}
+                    </Tag>
+                  </div>
+                </Card>
+              </Col>
+            </Row>
+          </Card>
+        </Col>
+      </Row>
     </div>
   );
 }

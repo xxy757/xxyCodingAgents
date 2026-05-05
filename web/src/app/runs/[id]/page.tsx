@@ -1,376 +1,336 @@
-// runs/[id]/page.tsx - 运行详情
-// 任务列表 + 事件时间线 + 工作流图（ReactFlow）。
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { apiFetch, type Task, type Event, type Run, type Gate, approveGate, listGates, statusHex } from "@/lib/api";
-import { StatusBadge } from "@/components/StatusBadge";
+import { useEffect, useState } from 'react';
 import {
-  ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  type Node,
-  type Edge,
-  type NodeTypes,
-  Position,
-  Handle,
-} from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
+  Card, Table, Tabs, Tag, Button, Space, Typography, Spin, Badge, Empty, message,
+} from 'antd';
 import {
-  ArrowLeft,
-  ListChecks,
-  Clock,
-  GitBranch,
-} from "@phosphor-icons/react/dist/ssr";
+  ArrowLeftOutlined, UnorderedListOutlined, ClockCircleOutlined, BranchesOutlined,
+  RedoOutlined, StopOutlined,
+} from '@ant-design/icons';
+import type { ColumnsType } from 'antd/es/table';
+import { useRun, useRunTasks, useRunTimeline, useRunWorkflow } from '@/lib/hooks/useRuns';
+import { useApproveGate } from '@/lib/hooks/useGates';
+import { useRetryTask, useCancelTask } from '@/lib/hooks/useTasks';
+import { WorkflowGraph } from '@/components/workflow/WorkflowGraph';
+import type { Task, Event } from '@/lib/types';
+import { formatDate, shortId } from '@/lib/utils';
 
-interface WorkflowGraph {
-  nodes: {
-    id: string;
-    type: string;
-    data: { label: string; status: string; task_type: string; task_id: string; gate_id?: string; gate_type?: string };
-    position: { x: number; y: number };
-  }[];
-  edges: { id: string; source: string; target: string }[];
+const { Title, Text, Paragraph } = Typography;
+
+/** 状态 Tag 颜色映射 */
+function statusTag(status: string) {
+  const map: Record<string, string> = {
+    running: 'processing',
+    completed: 'success',
+    active: 'success',
+    failed: 'error',
+    stopped: 'error',
+    pending: 'default',
+    queued: 'default',
+    cancelled: 'warning',
+    paused: 'orange',
+    evicted: 'volcano',
+    draft: 'blue',
+  };
+  return <Tag color={map[status] || 'default'}>{status}</Tag>;
 }
 
-function statusBorderColor(status: string): string {
-  return (statusHex[status] || statusHex.default).border;
+/** 事件类型对应的 Badge 颜色 */
+function eventTypeColor(type: string): string {
+  const map: Record<string, string> = {
+    task_created: 'blue',
+    task_started: 'processing',
+    task_completed: 'success',
+    task_failed: 'error',
+    task_cancelled: 'warning',
+    gate_pending: 'orange',
+    gate_approved: 'green',
+    gate_rejected: 'red',
+    checkpoint: 'purple',
+  };
+  return map[type] || 'default';
 }
 
-function statusBgColor(status: string): string {
-  return (statusHex[status] || statusHex.default).bg;
-}
-
-function TaskNode({ data }: { data: { label: string; status: string; task_type: string } }) {
-  const borderColor = statusBorderColor(data.status);
-  const bgColor = statusBgColor(data.status);
-  return (
-    <div
-      style={{
-        padding: "10px 16px",
-        borderRadius: 10,
-        border: `1.5px solid ${borderColor}`,
-        background: bgColor,
-        minWidth: 140,
-        fontSize: 12,
-        fontFamily: "var(--font-sans)",
-      }}
-    >
-      <Handle type="target" position={Position.Top} style={{ background: borderColor, width: 8, height: 8 }} />
-      <div style={{ fontWeight: 600, marginBottom: 4, color: "#18181b" }}>{data.label}</div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-        <span
-          style={{
-            padding: "2px 8px",
-            borderRadius: 6,
-            background: borderColor,
-            color: "#fff",
-            fontSize: 10,
-            fontWeight: 500,
-          }}
-        >
-          {data.status || "pending"}
-        </span>
-        <span style={{ color: "#71717a", fontSize: 11 }}>{data.task_type}</span>
-      </div>
-      <Handle type="source" position={Position.Bottom} style={{ background: borderColor, width: 8, height: 8 }} />
-    </div>
-  );
-}
-
-function gateStatusBorderColor(status: string): string {
-  switch (status) {
-    case "passed": return "#059669";
-    case "failed": return "#dc2626";
-    case "pending": return "#d97706";
-    default: return "#a1a1aa";
+/** 任务输出展示组件 */
+function TaskOutput({ data }: { data?: string }) {
+  if (!data) {
+    return <Text type="secondary" style={{ fontSize: 13 }}>暂无输出</Text>;
   }
-}
 
-function GateNode({ data }: { data: { label: string; status: string; gate_type: string; gate_id: string; onApprove?: (gateId: string) => void } }) {
-  const borderColor = gateStatusBorderColor(data.status);
+  // 尝试解析为 JSON 格式化展示
+  let formatted: string;
+  try {
+    const parsed = JSON.parse(data);
+    formatted = JSON.stringify(parsed, null, 2);
+  } catch {
+    formatted = data;
+  }
+
   return (
     <div
       style={{
-        padding: "8px 14px",
+        background: '#1f1f1f',
         borderRadius: 8,
-        border: `1.5px dashed ${borderColor}`,
-        background: data.status === "passed" ? "#ecfdf5" : data.status === "failed" ? "#fef2f2" : "#fffbeb",
-        minWidth: 120,
-        fontSize: 11,
-        fontFamily: "var(--font-sans)",
+        border: '1px solid #303030',
+        padding: 16,
+        maxHeight: 400,
+        overflowY: 'auto',
       }}
     >
-      <Handle type="target" position={Position.Top} style={{ background: borderColor, width: 8, height: 8 }} />
-      <div style={{ fontWeight: 600, marginBottom: 2, display: "flex", alignItems: "center", gap: 4, color: "#18181b" }}>
-        {data.label}
-      </div>
-      <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-        <span style={{ padding: "2px 6px", borderRadius: 4, background: borderColor, color: "#fff", fontSize: 9, fontWeight: 500 }}>
-          {data.status || "pending"}
-        </span>
-        <span style={{ color: "#71717a", fontSize: 9 }}>{data.gate_type}</span>
-      </div>
-      {data.gate_type === "manual" && data.status === "pending" && data.onApprove && (
-        <button
-          onClick={() => data.onApprove!(data.gate_id)}
-          style={{ marginTop: 6, padding: "3px 10px", fontSize: 10, fontWeight: 500, background: "#059669", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer" }}
-        >
-          通过
-        </button>
-      )}
-      <Handle type="source" position={Position.Bottom} style={{ background: borderColor, width: 8, height: 8 }} />
+      <pre
+        style={{
+          margin: 0,
+          fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, monospace",
+          fontSize: 12,
+          lineHeight: 1.7,
+          color: '#d4d4d4',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+        }}
+      >
+        {formatted}
+      </pre>
     </div>
   );
 }
-
-const nodeTypes: NodeTypes = {
-  task: TaskNode as any,
-  gate: GateNode as any,
-};
 
 export default function RunDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const [id, setId] = useState<string>("");
-  const [run, setRun] = useState<Run | null>(null);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [gates, setGates] = useState<Gate[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"tasks" | "timeline" | "workflow">("tasks");
-  const [workflowGraph, setWorkflowGraph] = useState<WorkflowGraph | null>(null);
-  const router = useRouter();
-
+  const [id, setId] = useState('');
   useEffect(() => { params.then((p) => setId(p.id)); }, [params]);
 
-  useEffect(() => {
-    if (!id) return;
-    apiFetch<Run>(`/api/runs/${id}`).then(setRun).catch((e) => setError(e.message));
-    apiFetch<Task[]>(`/api/runs/${id}/tasks`).then(setTasks).catch(() => {});
-    apiFetch<Event[]>(`/api/runs/${id}/timeline`).then(setEvents).catch(() => {});
-    apiFetch<WorkflowGraph>(`/api/runs/${id}/workflow`).then(setWorkflowGraph).catch(() => {});
-    listGates(id).then(setGates).catch(() => {});
-  }, [id]);
+  const { data: run, error: runError, isLoading: runLoading } = useRun(id);
+  const { data: tasks } = useRunTasks(id);
+  const { data: events } = useRunTimeline(id);
+  const { data: workflow } = useRunWorkflow(id);
+  const approveMutation = useApproveGate(id);
+  const retryMutation = useRetryTask(id);
+  const cancelMutation = useCancelTask(id);
 
-  const handleRetry = async (taskId: string) => {
-    try {
-      await apiFetch(`/api/tasks/${taskId}/retry`, { method: "POST" });
-      apiFetch<Task[]>(`/api/runs/${id}/tasks`).then(setTasks);
-    } catch (e: any) { setError(e.message); }
-  };
-
-  const handleCancel = async (taskId: string) => {
-    try {
-      await apiFetch(`/api/tasks/${taskId}/cancel`, { method: "POST" });
-      apiFetch<Task[]>(`/api/runs/${id}/tasks`).then(setTasks);
-    } catch (e: any) { setError(e.message); }
-  };
-
-  const handleApproveGate = async (gateId: string) => {
-    try {
-      await approveGate(gateId, "user");
-      listGates(id).then(setGates);
-      apiFetch<WorkflowGraph>(`/api/runs/${id}/workflow`).then(setWorkflowGraph).catch(() => {});
-    } catch (e: any) { setError(e.message); }
-  };
-
-  if (!id) return <div className="text-sm text-zinc-400 py-12 text-center">加载中...</div>;
-
-  if (error && !run) {
+  if (!id) {
     return (
-      <div className="space-y-4">
-        <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-sm">{error}</div>
-        <button onClick={() => router.back()} className="text-sm text-accent-600 hover:underline">返回</button>
+      <div style={{ textAlign: 'center', padding: '48px 0' }}>
+        <Spin tip="加载中..." />
       </div>
     );
   }
 
-  const tabs = [
-    { key: "tasks" as const, label: "任务", count: tasks.length, icon: ListChecks },
-    { key: "timeline" as const, label: "时间线", count: events.length, icon: Clock },
-    { key: "workflow" as const, label: "工作流", count: null, icon: GitBranch },
+  const errorMessage = runError?.message || approveMutation.error?.message || retryMutation.error?.message || cancelMutation.error?.message;
+
+  const taskColumns: ColumnsType<Task> = [
+    {
+      title: '任务',
+      dataIndex: 'title',
+      key: 'title',
+      render: (title: string, record: Task) => (
+        <div>
+          <div style={{ fontWeight: 500 }}>{title || record.task_type}</div>
+          <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.45)', marginTop: 2 }}>
+            {record.task_type} | {record.priority} | {record.resource_class} | 尝试 #{record.attempt_no}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: 'ID',
+      dataIndex: 'id',
+      key: 'id',
+      width: 120,
+      render: (id: string) => (
+        <span style={{ fontFamily: 'monospace', fontSize: 13, color: 'rgba(0,0,0,0.45)' }}>{shortId(id)}</span>
+      ),
+    },
+    {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 120,
+      render: (status: string) => statusTag(status),
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 160,
+      render: (_: any, record: Task) => (
+        <Space size="small">
+          {(record.status === 'failed' || record.status === 'evicted') && (
+            <Button
+              type="primary"
+              size="small"
+              icon={<RedoOutlined />}
+              loading={retryMutation.isPending}
+              onClick={() => retryMutation.mutate(record.id)}
+            >
+              重试
+            </Button>
+          )}
+          {(record.status === 'queued' || record.status === 'running') && (
+            <Button
+              danger
+              size="small"
+              icon={<StopOutlined />}
+              loading={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate(record.id)}
+            >
+              取消
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  const tabItems = [
+    {
+      key: 'tasks',
+      label: (
+        <Space size={4}>
+          <UnorderedListOutlined />
+          任务
+          <Badge count={tasks?.length ?? 0} showZero size="small" style={{ marginLeft: 4 }} />
+        </Space>
+      ),
+      children: (
+        <Table<Task>
+          columns={taskColumns}
+          dataSource={tasks || []}
+          rowKey="id"
+          locale={{ emptyText: '暂无任务' }}
+          pagination={false}
+          size="middle"
+          expandable={{
+            rowExpandable: (record) => !!(record.output_data || record.input_data),
+            expandedRowRender: (record) => (
+              <div style={{ padding: '8px 0' }}>
+                {record.input_data && (
+                  <div style={{ marginBottom: 12 }}>
+                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>
+                      输入数据
+                    </Text>
+                    <TaskOutput data={record.input_data} />
+                  </div>
+                )}
+                {record.output_data && (
+                  <div>
+                    <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>
+                      执行结果
+                    </Text>
+                    <TaskOutput data={record.output_data} />
+                  </div>
+                )}
+              </div>
+            ),
+          }}
+        />
+      ),
+    },
+    {
+      key: 'timeline',
+      label: (
+        <Space size={4}>
+          <ClockCircleOutlined />
+          时间线
+          <Badge count={events?.length ?? 0} showZero size="small" style={{ marginLeft: 4 }} />
+        </Space>
+      ),
+      children: (events || []).length === 0 ? (
+        <Empty description="暂无事件" style={{ padding: '48px 0' }} />
+      ) : (
+        <div style={{ padding: '16px 0' }}>
+          {(events || []).map((event: Event) => (
+            <div
+              key={event.id}
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 16,
+                padding: '12px 24px',
+                borderBottom: '1px solid #f0f0f0',
+                transition: 'background 0.2s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#fafafa'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+            >
+              <div style={{ minWidth: 160, fontSize: 12, color: 'rgba(0,0,0,0.45)', fontFamily: 'monospace', paddingTop: 2 }}>
+                {formatDate(event.created_at)}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Tag color={eventTypeColor(event.event_type)} style={{ margin: 0 }}>
+                    {event.event_type}
+                  </Tag>
+                  <span style={{ fontSize: 14 }}>{event.message}</span>
+                </div>
+                {(event.task_id || event.agent_id) && (
+                  <div style={{ fontSize: 12, color: 'rgba(0,0,0,0.45)', marginTop: 4, fontFamily: 'monospace' }}>
+                    {event.task_id && `Task: ${shortId(event.task_id)}`}
+                    {event.task_id && event.agent_id && ' | '}
+                    {event.agent_id && `Agent: ${shortId(event.agent_id)}`}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      key: 'workflow',
+      label: (
+        <Space size={4}>
+          <BranchesOutlined />
+          工作流
+        </Space>
+      ),
+      children: (
+        <div style={{ padding: 16 }}>
+          <WorkflowGraph
+            graph={workflow || null}
+            onApproveGate={(gateId: string) => approveMutation.mutate({ gateId })}
+          />
+        </div>
+      ),
+    },
   ];
 
   return (
-    <div className="space-y-6 animate-fade-up">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <button
-          onClick={() => router.back()}
-          className="w-9 h-9 rounded-lg bg-zinc-100 flex items-center justify-center hover:bg-zinc-200 pressable transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4 text-zinc-600" />
-        </button>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 truncate">
-            {run?.title || `Run ${id.slice(0, 8)}`}
-          </h1>
+    <div>
+      {/* PageHeader */}
+      <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => window.history.back()}
+          style={{ marginRight: 12 }}
+        />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Title level={4} style={{ margin: 0 }}>
+              {runLoading ? '加载中...' : (run?.title || `Run ${shortId(id)}`)}
+            </Title>
+            {run && statusTag(run.status)}
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(0,0,0,0.45)', fontFamily: 'monospace', marginTop: 4 }}>
+            {shortId(id)}
+          </div>
         </div>
-        {run && <StatusBadge status={run.status} />}
       </div>
 
-      {error && (
-        <div className="p-3 bg-red-50 border border-red-200/60 rounded-xl text-red-700 text-sm">{error}</div>
+      {/* Error Banner */}
+      {errorMessage && (
+        <Card size="small" style={{ marginBottom: 16, borderColor: '#ff4d4f' }}>
+          <span style={{ color: '#ff4d4f' }}>{errorMessage}</span>
+        </Card>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-zinc-100 rounded-xl w-fit">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                activeTab === tab.key
-                  ? "bg-white text-zinc-900 shadow-xs"
-                  : "text-zinc-500 hover:text-zinc-700"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {tab.label}
-              {tab.count !== null && (
-                <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                  activeTab === tab.key ? "bg-zinc-100 text-zinc-600" : "bg-zinc-200/60 text-zinc-400"
-                }`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tasks Tab */}
-      {activeTab === "tasks" && (
-        <div>
-          {tasks.length === 0 ? (
-            <div className="card-bezel p-12 text-center">
-              <p className="text-sm text-zinc-400">暂无任务</p>
-            </div>
-          ) : (
-            <div className="space-y-2 stagger">
-              {tasks.map((task) => (
-                <div key={task.id} className="card-bezel p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-4 min-w-0">
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-semibold text-zinc-900">{task.title || task.task_type}</h3>
-                      <div className="flex items-center gap-3 mt-1 text-xs text-zinc-400">
-                        <span className="font-mono">{task.id.slice(0, 8)}</span>
-                        <span>{task.task_type}</span>
-                        <span>{task.priority}</span>
-                        <span>{task.resource_class}</span>
-                        <span>尝试 #{task.attempt_no}</span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
-                    <StatusBadge status={task.status} />
-                    {(task.status === "failed" || task.status === "evicted") && (
-                      <button
-                        onClick={() => handleRetry(task.id)}
-                        className="px-3 py-1.5 text-xs font-medium text-accent-700 bg-accent-50 border border-accent-200/60
-                                   rounded-lg hover:bg-accent-100 pressable transition-colors"
-                      >
-                        重试
-                      </button>
-                    )}
-                    {(task.status === "queued" || task.status === "running") && (
-                      <button
-                        onClick={() => handleCancel(task.id)}
-                        className="px-3 py-1.5 text-xs font-medium text-red-700 bg-red-50 border border-red-200/60
-                                   rounded-lg hover:bg-red-100 pressable transition-colors"
-                      >
-                        取消
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Timeline Tab */}
-      {activeTab === "timeline" && (
-        <div>
-          {events.length === 0 ? (
-            <div className="card-bezel p-12 text-center">
-              <p className="text-sm text-zinc-400">暂无事件</p>
-            </div>
-          ) : (
-            <div className="space-y-2 stagger">
-              {events.map((event) => (
-                <div key={event.id} className="card-bezel p-4 flex items-start gap-4">
-                  <div className="text-xs text-zinc-400 min-w-[130px] pt-0.5 font-mono">
-                    {new Date(event.created_at).toLocaleString("zh-CN")}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 bg-zinc-100 rounded-md text-xs font-medium text-zinc-600">
-                        {event.event_type}
-                      </span>
-                      <span className="text-sm text-zinc-700">{event.message}</span>
-                    </div>
-                    {event.task_id && (
-                      <div className="text-xs text-zinc-400 mt-1 font-mono">
-                        Task: {event.task_id.slice(0, 8)}
-                        {event.agent_id && ` | Agent: ${event.agent_id.slice(0, 8)}`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Workflow Tab */}
-      {activeTab === "workflow" && (
-        <div className="card-bezel overflow-hidden">
-          {!workflowGraph || workflowGraph.nodes.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-sm text-zinc-400">暂无工作流数据</p>
-            </div>
-          ) : (
-            <div style={{ width: "100%", height: 500 }}>
-              <ReactFlow
-                nodes={workflowGraph.nodes.map((n) => ({
-                  id: n.id,
-                  type: n.type || "task",
-                  data: {
-                    ...n.data,
-                    onApprove: n.type === "gate" && n.data.gate_type === "manual" && n.data.status !== "passed" ? handleApproveGate : undefined,
-                  },
-                  position: { x: n.position.x, y: n.position.y },
-                }))}
-                edges={workflowGraph.edges.map((e) => ({
-                  id: e.id,
-                  source: e.source,
-                  target: e.target,
-                  animated: true,
-                  style: { stroke: "#d4d4d8", strokeWidth: 1.5 },
-                }))}
-                nodeTypes={nodeTypes}
-                fitView
-                minZoom={0.3}
-                maxZoom={2}
-              >
-                <Background color="#e4e4e7" gap={20} />
-                <Controls />
-                <MiniMap
-                  nodeColor={(node) => statusBorderColor((node.data as any)?.status || "")}
-                  maskColor="rgba(0,0,0,0.06)"
-                  style={{ borderRadius: 8 }}
-                />
-              </ReactFlow>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Tabs Card */}
+      <Card styles={{ body: { padding: 0 } }}>
+        <Tabs
+          defaultActiveKey="tasks"
+          items={tabItems}
+          style={{ padding: '0 16px' }}
+        />
+      </Card>
     </div>
   );
 }

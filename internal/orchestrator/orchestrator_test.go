@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -164,6 +165,113 @@ func TestFailTask_AbortPolicy(t *testing.T) {
 	gotRun, _ := repos.Runs.GetByID(run.ID)
 	if gotRun.Status != domain.RunStatusFailed {
 		t.Errorf("expected run failed (abort policy), got %s", gotRun.Status)
+	}
+}
+
+// TestCreateRun_WithTemplate_WorkspaceFallback 验证 instantiateWorkflow 在无 gitManager 时
+// 为每个任务创建临时工作区，避免 workspacePath 为空。
+func TestCreateRun_WithTemplate_WorkspaceFallback(t *testing.T) {
+	o, repos := setupOrchestratorTest(t)
+	// setupOrchestratorTest 传入 gitManager=nil，project 无 RepoURL
+	projectID, templateID := seedProjectAndTemplate(t, repos)
+
+	run, err := o.CreateRun(context.Background(), projectID, templateID, "ci-run", "")
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+	// 从数据库重新读取，instantiateWorkflow 内部更新了 status
+	gotRun, _ := repos.Runs.GetByID(run.ID)
+	if gotRun.Status != domain.RunStatusRunning {
+		t.Fatalf("expected running, got %s", gotRun.Status)
+	}
+
+	tasks, _ := repos.Tasks.ListByRun(run.ID)
+	if len(tasks) == 0 {
+		t.Fatal("expected at least one task")
+	}
+
+	for _, task := range tasks {
+		if task.WorkspacePath == "" {
+			t.Errorf("task %s (%s): expected non-empty workspace path, got empty", task.ID, task.Title)
+		}
+		// 验证临时目录确实存在于文件系统
+		if _, err := os.Stat(task.WorkspacePath); os.IsNotExist(err) {
+			t.Errorf("task %s: workspace path %s does not exist", task.ID, task.WorkspacePath)
+		}
+	}
+}
+
+// TestCreateRun_WithTemplate_NoRepoURL_ProjectWithRepoURL 验证项目有 RepoURL 但 gitManager 为 nil
+// 时（无法克隆），也能正确回退到临时工作区。
+func TestCreateRun_WithTemplate_NoRepoURL_ProjectWithRepoURL(t *testing.T) {
+	o, repos := setupOrchestratorTest(t)
+	// 创建带有 RepoURL 的项目，但 gitManager 仍为 nil
+	repos.Projects.Create(&domain.Project{
+		ID: "p2", Name: "repo-project", RepoURL: "https://github.com/example/repo.git",
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
+	repos.TaskSpecs.Create(&domain.TaskSpec{
+		ID: "ts1", Name: "build", TaskType: "build", CommandTemplate: "make", ResourceClass: domain.ResourceClassLight,
+	})
+	repos.WorkflowTemplates.Create(&domain.WorkflowTemplate{
+		ID: "wt2", Name: "single", NodesJSON: `[{"id":"n1","task_spec_id":"ts1","label":"build"}]`,
+		EdgesJSON: `[]`, OnFailure: "abort",
+	})
+
+	run, err := o.CreateRun(context.Background(), "p2", "wt2", "repo-run", "")
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	tasks, _ := repos.Tasks.ListByRun(run.ID)
+	if len(tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(tasks))
+	}
+	if tasks[0].WorkspacePath == "" {
+		t.Error("expected fallback temp workspace, got empty workspace path")
+	}
+}
+
+// TestCreateRun_WithTemplate_MultipleTasksShareWorkspace 验证同一 workflow 中的多个任务
+// 共享同一个临时工作区路径。
+func TestCreateRun_WithTemplate_MultipleTasksShareWorkspace(t *testing.T) {
+	o, repos := setupOrchestratorTest(t)
+	projectID, templateID := seedProjectAndTemplate(t, repos)
+
+	run, err := o.CreateRun(context.Background(), projectID, templateID, "shared-ws", "")
+	if err != nil {
+		t.Fatalf("CreateRun: %v", err)
+	}
+
+	tasks, _ := repos.Tasks.ListByRun(run.ID)
+	if len(tasks) != 2 {
+		t.Fatalf("expected 2 tasks, got %d", len(tasks))
+	}
+
+	// 所有任务的 workspace 应该相同（同一个临时目录）
+	ws := tasks[0].WorkspacePath
+	for _, task := range tasks {
+		if task.WorkspacePath != ws {
+			t.Errorf("task %s: expected workspace %s, got %s", task.ID, ws, task.WorkspacePath)
+		}
+	}
+}
+
+// TestCreateSimpleRun_NoRepo_FallbackWorkspace 验证 CreateSimpleRun 在无仓库时
+// 也会创建临时工作区。
+func TestCreateSimpleRun_NoRepo_FallbackWorkspace(t *testing.T) {
+	o, repos := setupOrchestratorTest(t)
+	repos.Projects.Create(&domain.Project{ID: "p3", Name: "no-repo", CreatedAt: time.Now(), UpdatedAt: time.Now()})
+
+	result, err := o.CreateSimpleRun(context.Background(), "p3", "simple", "desc", "input data", "code")
+	if err != nil {
+		t.Fatalf("CreateSimpleRun: %v", err)
+	}
+	if result.Task.WorkspacePath == "" {
+		t.Error("expected non-empty workspace path for simple run without repo")
+	}
+	if _, err := os.Stat(result.Task.WorkspacePath); os.IsNotExist(err) {
+		t.Errorf("workspace path %s does not exist", result.Task.WorkspacePath)
 	}
 }
 

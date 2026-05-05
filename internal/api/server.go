@@ -93,6 +93,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("POST /api/workflow-templates", s.handleCreateWorkflowTemplate)
 
 	// 提示词草稿 API
+	s.mux.HandleFunc("GET /api/tech-stacks", s.handleListTechStacks)
 	s.mux.HandleFunc("POST /api/prompt-drafts/generate", s.handleGeneratePromptDraft)
 	s.mux.HandleFunc("GET /api/prompt-drafts", s.handleListPromptDrafts)
 	s.mux.HandleFunc("PUT /api/prompt-drafts/{id}", s.handleUpdatePromptDraft)

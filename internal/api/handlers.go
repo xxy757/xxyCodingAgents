@@ -857,6 +857,13 @@ func (s *Server) handleCreateWorkflowTemplate(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusCreated, wt)
 }
 
+// ==================== 技术方案 API ====================
+
+// handleListTechStacks 返回所有可选的技术方案预设列表。
+func (s *Server) handleListTechStacks(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, prompt.GetTechStackOptions())
+}
+
 // ==================== 提示词草稿 API ====================
 
 // handleGeneratePromptDraft 处理生成提示词草稿的请求。
@@ -866,6 +873,7 @@ func (s *Server) handleGeneratePromptDraft(w http.ResponseWriter, r *http.Reques
 		ProjectID     string `json:"project_id"`
 		OriginalInput string `json:"original_input"`
 		TaskType      string `json:"task_type"`
+		TechStackID   string `json:"tech_stack_id"`
 	}
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -892,8 +900,8 @@ func (s *Server) handleGeneratePromptDraft(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// 使用规则模板生成结构化草稿
-	generatedPrompt := prompt.GenerateDraft(req.OriginalInput, req.TaskType)
+	// 使用规则模板生成结构化草稿（传入技术方案 ID）
+	generatedPrompt := prompt.GenerateDraft(req.OriginalInput, req.TaskType, req.TechStackID)
 
 	// 推断实际使用的任务类型
 	taskType := req.TaskType
